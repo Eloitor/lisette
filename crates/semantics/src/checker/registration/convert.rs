@@ -4,7 +4,7 @@ use crate::checker::EnvResolve;
 use syntax::EcoString;
 use syntax::ast::{Annotation, Generic, Span};
 use syntax::program::{Definition, DefinitionBody};
-use syntax::types::{SubstitutionMap, Type, substitute};
+use syntax::types::{SubstitutionMap, Type, substitute, unqualified_name};
 
 use crate::checker::TaskState;
 use crate::store::Store;
@@ -97,6 +97,18 @@ impl TaskState<'_> {
                     }
                     return Type::Error;
                 };
+
+                if let Some((kind, help)) =
+                    self.classify_non_type_name(store, &qualified_name, type_name)
+                {
+                    self.sink.push(diagnostics::infer::value_in_type_position(
+                        type_name,
+                        kind,
+                        *annotation_span,
+                        help,
+                    ));
+                    return Type::Error;
+                }
 
                 self.track_name_usage(
                     store,
@@ -214,6 +226,66 @@ impl TaskState<'_> {
                 unreachable!("Annotation::Opaque should not be converted to a type")
             }
         }
+    }
+
+    pub(super) fn classify_non_type_name(
+        &self,
+        store: &Store,
+        qualified_name: &str,
+        type_name: &str,
+    ) -> Option<(&'static str, Option<String>)> {
+        let definition = store.get_definition(qualified_name)?;
+        if !matches!(definition.body, DefinitionBody::Value { .. }) {
+            return None;
+        }
+        let body = definition.ty.unwrap_forall();
+
+        if body
+            .get_qualified_id()
+            .is_some_and(|id| id == qualified_name)
+        {
+            return None;
+        }
+
+        let is_function = matches!(body, Type::Function(_));
+        let enum_id = match body {
+            Type::Function(f) => f.return_type.get_qualified_id(),
+            other => other.get_qualified_id(),
+        };
+        let variant_name = unqualified_name(qualified_name);
+        let parent_enum = enum_id.filter(|id| {
+            store.get_definition(id).is_some_and(|d| match &d.body {
+                DefinitionBody::Enum { variants, .. } => {
+                    variants.iter().any(|v| v.name == variant_name)
+                }
+                DefinitionBody::ValueEnum { variants, .. } => {
+                    variants.iter().any(|v| v.name == variant_name)
+                }
+                _ => false,
+            })
+        });
+
+        if let Some(enum_id) = parent_enum {
+            let enum_name = unqualified_name(enum_id);
+            let help = if is_function {
+                format!(
+                    "Use `{}` for the enum type, or call `{}(...)` to construct a value",
+                    enum_name, type_name
+                )
+            } else {
+                format!("Use `{}` for the enum type", enum_name)
+            };
+            return Some(("enum variant", Some(help)));
+        }
+
+        if is_function {
+            return Some((
+                "function",
+                Some("Use a function type alias or write the function type directly".to_string()),
+            ));
+        }
+
+        Some(("value", Some("Only a type is allowed here".to_string())))
     }
 
     pub(super) fn resolve_type_with_arity(

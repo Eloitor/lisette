@@ -4733,6 +4733,24 @@ fn main() {
 }
 
 #[test]
+fn value_placeholder_for_forward_reference_resolves() {
+    infer(
+        r#"{
+        struct Holder {
+          inner: Later,
+        }
+
+        struct Later {
+          n: int,
+        }
+
+        Holder { inner: Later { n: 1 } }
+        }"#,
+    )
+    .assert_type_struct("Holder");
+}
+
+#[test]
 fn interface_covariance_rejects_reverse_direction() {
     let typedef = r#"
 pub interface Stringer {

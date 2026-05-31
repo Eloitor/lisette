@@ -169,6 +169,29 @@ pub fn type_not_found(type_name: &str, annotation_span: Span) -> LisetteDiagnost
         .with_help("Define or import this type")
 }
 
+pub fn value_in_type_position(
+    name: &str,
+    kind: &str,
+    annotation_span: Span,
+    help: Option<String>,
+) -> LisetteDiagnostic {
+    let name_span = Span::new(
+        annotation_span.file_id,
+        annotation_span.byte_offset,
+        name.len() as u32,
+    );
+
+    let mut diag = LisetteDiagnostic::error("Value in type position")
+        .with_resolve_code("value_in_type_position")
+        .with_span_label(&name_span, format!("expected type, found {}", kind));
+
+    if let Some(help) = help {
+        diag = diag.with_help(help);
+    }
+
+    diag
+}
+
 pub fn undeclared_impl_type_param(
     type_name: &str,
     annotation_span: Span,
