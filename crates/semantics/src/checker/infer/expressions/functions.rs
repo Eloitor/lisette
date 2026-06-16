@@ -1039,6 +1039,20 @@ impl InferCtx<'_, '_> {
         handle_self_receiver: bool,
     ) -> Vec<Binding> {
         let store = self.store;
+
+        // `VarArgs<T>` must be the last function parameter
+        if let Some((_last, leading)) = params.split_last() {
+            for binding in leading {
+                if let Some(annotation @ Annotation::Constructor { name, .. }) = &binding.annotation
+                    && name == "VarArgs"
+                {
+                    self.sink.push(diagnostics::infer::variadic_param_not_last(
+                        annotation.get_span(),
+                    ));
+                }
+            }
+        }
+
         params
             .into_iter()
             .enumerate()
@@ -1063,7 +1077,7 @@ impl InferCtx<'_, '_> {
                     binding
                         .annotation
                         .as_ref()
-                        .map(|a| self.convert_to_type(store, a, pattern_span))
+                        .map(|a| self.convert_to_type_inner(store, a, pattern_span, true))
                         .unwrap_or_else(|| self.new_type_var())
                 });
 
