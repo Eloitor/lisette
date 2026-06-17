@@ -1681,12 +1681,9 @@ fn run() -> Option<int> {
     assert_emit_snapshot!(input);
 }
 
-// Regression: a plain function that returns an enum and happens to share a
-// variant's arity must not be classified as that variant's constructor.
-// `prepend` returns `IntList` with 2 params, just like `Cons(int, IntList)`.
-// The make-function fallback matched by enum name + arity alone, so
-// `prepend(...)` became `IntList.Cons` and emitted its list arg as `&list`
-// (`*IntList`) where a by-value `IntList` is expected, producing uncompilable Go.
+// A plain function whose return type and arity coincide with a variant
+// (`prepend` vs `Cons(int, IntList)`) is a normal call, not a constructor: its
+// recursive arg is passed by value, never addressed.
 #[test]
 fn function_returning_enum_with_variant_arity_is_not_a_constructor() {
     let input = r#"
@@ -1701,6 +1698,28 @@ fn prepend(value: int, list: IntList) -> IntList {
 
 fn small() -> IntList {
   prepend(1, prepend(2, IntList.Empty))
+}
+"#;
+    assert_emit_snapshot!(input);
+}
+
+// A recursive-enum constructor is a first-class value: its make-function takes
+// the recursive field by value (`arg1 IntList`), so passing it to a higher-order
+// function matches the expected `fn(int, IntList) -> IntList` signature.
+#[test]
+fn recursive_enum_constructor_passed_to_higher_order_function() {
+    let input = r#"
+enum IntList {
+  Empty,
+  Cons(int, IntList),
+}
+
+fn apply(f: fn(int, IntList) -> IntList, x: int, xs: IntList) -> IntList {
+  f(x, xs)
+}
+
+fn build() -> IntList {
+  apply(IntList.Cons, 1, apply(IntList.Cons, 2, IntList.Empty))
 }
 "#;
     assert_emit_snapshot!(input);

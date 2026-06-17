@@ -7,12 +7,12 @@ description: |
     Cons(int, IntList),
   }
   
-  fn prepend(value: int, list: IntList) -> IntList {
-    IntList.Cons(value, list)
+  fn apply(f: fn(int, IntList) -> IntList, x: int, xs: IntList) -> IntList {
+    f(x, xs)
   }
   
-  fn small() -> IntList {
-    prepend(1, prepend(2, IntList.Empty))
+  fn build() -> IntList {
+    apply(IntList.Cons, 1, apply(IntList.Cons, 2, IntList.Empty))
   }
 ---
 package main
@@ -38,10 +38,10 @@ type IntList struct {
 	Cons1 *IntList
 }
 
-func prepend(value int, list IntList) IntList {
-	return MakeIntListCons(value, list)
+func apply(f func(int, IntList) IntList, x int, xs IntList) IntList {
+	return f(x, xs)
 }
 
-func small() IntList {
-	return prepend(1, prepend(2, MakeIntListEmpty()))
+func build() IntList {
+	return apply(MakeIntListCons, 1, apply(MakeIntListCons, 2, MakeIntListEmpty()))
 }
