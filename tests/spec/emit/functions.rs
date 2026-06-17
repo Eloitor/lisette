@@ -1680,3 +1680,28 @@ fn run() -> Option<int> {
 "#;
     assert_emit_snapshot!(input);
 }
+
+// Regression: a plain function that returns an enum and happens to share a
+// variant's arity must not be classified as that variant's constructor.
+// `prepend` returns `IntList` with 2 params, just like `Cons(int, IntList)`.
+// The make-function fallback matched by enum name + arity alone, so
+// `prepend(...)` became `IntList.Cons` and emitted its list arg as `&list`
+// (`*IntList`) where a by-value `IntList` is expected, producing uncompilable Go.
+#[test]
+fn function_returning_enum_with_variant_arity_is_not_a_constructor() {
+    let input = r#"
+enum IntList {
+  Empty,
+  Cons(int, IntList),
+}
+
+fn prepend(value: int, list: IntList) -> IntList {
+  IntList.Cons(value, list)
+}
+
+fn small() -> IntList {
+  prepend(1, prepend(2, IntList.Empty))
+}
+"#;
+    assert_emit_snapshot!(input);
+}

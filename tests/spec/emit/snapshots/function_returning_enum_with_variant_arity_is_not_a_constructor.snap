@@ -1,0 +1,36 @@
+---
+source: tests/spec/emit/functions.rs
+description: "\nenum IntList {\n  Empty,\n  Cons(int, IntList),\n}\n\nfn prepend(value: int, list: IntList) -> IntList {\n  IntList.Cons(value, list)\n}\n\nfn small() -> IntList {\n  prepend(1, prepend(2, IntList.Empty))\n}\n"
+---
+package main
+
+func MakeIntListEmpty() IntList {
+	return IntList{Tag: IntListEmpty}
+}
+
+func MakeIntListCons(arg0 int, arg1 *IntList) IntList {
+	return IntList{Tag: IntListCons, Cons0: arg0, Cons1: arg1}
+}
+
+type IntListTag int
+
+const (
+	IntListEmpty IntListTag = iota
+	IntListCons
+)
+
+type IntList struct {
+	Tag   IntListTag
+	Cons0 int
+	Cons1 *IntList
+}
+
+func prepend(value int, list IntList) IntList {
+	_arg_2 := value
+	ptr_1 := list
+	return MakeIntListCons(_arg_2, &ptr_1)
+}
+
+func small() IntList {
+	return prepend(1, prepend(2, MakeIntListEmpty()))
+}

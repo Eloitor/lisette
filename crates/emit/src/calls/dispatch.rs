@@ -444,6 +444,7 @@ impl Planner<'_> {
                     for key in self.facts.make_function_keys() {
                         if let Some((e_name, v_name)) = key.split_once('.')
                             && e_name == enum_name
+                            && v_name == variant
                             && let Some(layout) = self.enum_layout(&enum_id)
                             && let Some(v) = layout.get_variant(v_name)
                             && v.fields.len() == f.params.len()
