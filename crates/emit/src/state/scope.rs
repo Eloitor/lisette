@@ -1,12 +1,10 @@
-use rustc_hash::FxHashMap as HashMap;
 use rustc_hash::FxHashSet as HashSet;
-use std::rc::Rc;
 
 use crate::Bindings;
 use crate::ReturnContext;
 use crate::context::lowering::LoopContext;
 use crate::plan::bodies::LoopId;
-use crate::state::bindings::{BindingValue, InlineExpr};
+use crate::state::bindings::{BindingSnapshot, BindingValue, InlineExpr};
 
 pub(crate) struct ScopeState {
     next_var: usize,
@@ -14,9 +12,8 @@ pub(crate) struct ScopeState {
     bindings: Bindings,
     declared: Vec<HashSet<String>>,
     type_param_go_names: HashSet<String>,
-    scope_depth: usize,
     loop_stack: Vec<LoopContext>,
-    return_ctx_stack: Vec<Rc<ReturnContext>>,
+    return_ctx_stack: Vec<ReturnContext>,
     test_handle_stack: Vec<String>,
     assign_targets: HashSet<String>,
     go_const_bindings: Vec<HashSet<String>>,
@@ -24,13 +21,8 @@ pub(crate) struct ScopeState {
     use_frames: Vec<HashSet<String>>,
 }
 
-pub(crate) struct BindingSnapshot {
-    inner: HashMap<String, BindingValue>,
-}
-
 pub(crate) struct IsolatedFunctionFrame {
     declared: Vec<HashSet<String>>,
-    scope_depth: usize,
 }
 
 impl ScopeState {
@@ -41,7 +33,6 @@ impl ScopeState {
             bindings: Bindings::new(),
             declared: vec![HashSet::default()],
             type_param_go_names: HashSet::default(),
-            scope_depth: 0,
             loop_stack: Vec::new(),
             return_ctx_stack: Vec::new(),
             test_handle_stack: Vec::new(),
@@ -57,7 +48,10 @@ impl ScopeState {
 
     /// Pop and return the region's uses, merging them into the enclosing region.
     pub(crate) fn exit_use_region(&mut self) -> HashSet<String> {
-        let frame = self.use_frames.pop().unwrap_or_default();
+        let frame = self
+            .use_frames
+            .pop()
+            .expect("a use region must be entered before it is exited");
         if let Some(parent) = self.use_frames.last_mut() {
             parent.extend(frame.iter().cloned());
         }
@@ -124,25 +118,28 @@ impl ScopeState {
     }
 
     pub(crate) fn binding_snapshot(&self) -> BindingSnapshot {
-        BindingSnapshot {
-            inner: self.bindings.snapshot(),
-        }
+        self.bindings.snapshot()
     }
 
-    pub(crate) fn restore_binding_snapshot(&mut self, snapshot: BindingSnapshot) {
-        self.bindings.restore_snapshot(snapshot.inner);
+    pub(crate) fn replace_binding_snapshot(
+        &mut self,
+        snapshot: BindingSnapshot,
+    ) -> BindingSnapshot {
+        self.bindings.replace_snapshot(snapshot)
     }
 
     pub(crate) fn declare_go_name(&mut self, go_name: &str) {
-        if let Some(current) = self.declared.last_mut() {
-            current.insert(go_name.to_string());
-        }
+        self.declared
+            .last_mut()
+            .expect("scope state always retains a declaration frame")
+            .insert(go_name.to_string());
     }
 
     pub(crate) fn try_declare_go_name(&mut self, go_name: &str) -> bool {
-        let Some(current) = self.declared.last_mut() else {
-            return true;
-        };
+        let current = self
+            .declared
+            .last_mut()
+            .expect("scope state always retains a declaration frame");
         if current.contains(go_name) {
             false
         } else {
@@ -160,14 +157,12 @@ impl ScopeState {
     }
 
     pub(crate) fn enter_block(&mut self) {
-        self.scope_depth += 1;
         self.bindings.save();
         self.declared.push(HashSet::default());
         self.go_const_bindings.push(HashSet::default());
     }
 
     pub(crate) fn exit_block(&mut self) {
-        self.scope_depth = self.scope_depth.saturating_sub(1);
         self.bindings.restore();
         pop_keep_base(&mut self.declared);
         pop_keep_base(&mut self.go_const_bindings);
@@ -176,10 +171,8 @@ impl ScopeState {
     pub(crate) fn enter_isolated_function(&mut self) -> IsolatedFunctionFrame {
         let saved = IsolatedFunctionFrame {
             declared: std::mem::take(&mut self.declared),
-            scope_depth: self.scope_depth,
         };
         self.declared = vec![self.type_param_go_names.clone()];
-        self.scope_depth = 0;
         self.bindings.save();
         saved
     }
@@ -187,7 +180,6 @@ impl ScopeState {
     pub(crate) fn exit_isolated_function(&mut self, frame: IsolatedFunctionFrame) {
         self.bindings.restore();
         self.declared = frame.declared;
-        self.scope_depth = frame.scope_depth;
     }
 
     pub(crate) fn fresh_go_name(&mut self, hint: Option<&str>) -> String {
@@ -218,15 +210,19 @@ impl ScopeState {
     }
 
     pub(crate) fn pop_loop(&mut self) {
-        self.loop_stack.pop();
+        self.loop_stack
+            .pop()
+            .expect("a loop context must be pushed before it is popped");
     }
 
-    pub(crate) fn push_return_ctx(&mut self, ctx: Rc<ReturnContext>) {
+    pub(crate) fn push_return_ctx(&mut self, ctx: ReturnContext) {
         self.return_ctx_stack.push(ctx);
     }
 
     pub(crate) fn pop_return_ctx(&mut self) {
-        self.return_ctx_stack.pop();
+        self.return_ctx_stack
+            .pop()
+            .expect("a return context must be pushed before it is popped");
     }
 
     pub(crate) fn push_test_handle(&mut self, name: String) {
@@ -234,14 +230,16 @@ impl ScopeState {
     }
 
     pub(crate) fn pop_test_handle(&mut self) {
-        self.test_handle_stack.pop();
+        self.test_handle_stack
+            .pop()
+            .expect("a test handle must be pushed before it is popped");
     }
 
     pub(crate) fn current_test_handle(&self) -> Option<&str> {
         self.test_handle_stack.last().map(String::as_str)
     }
 
-    pub(crate) fn current_return_ctx(&self) -> Option<Rc<ReturnContext>> {
+    pub(crate) fn current_return_ctx(&self) -> Option<ReturnContext> {
         self.return_ctx_stack.last().cloned()
     }
 
@@ -253,11 +251,11 @@ impl ScopeState {
         self.loop_stack.last().map(|context| context.id)
     }
 
-    pub(crate) fn try_acquire_assign_target(&mut self, var: &str) -> bool {
+    pub(crate) fn activate_assign_target(&mut self, var: &str) -> bool {
         self.assign_targets.insert(var.to_string())
     }
 
-    pub(crate) fn release_assign_target(&mut self, var: &str) {
+    pub(crate) fn deactivate_assign_target(&mut self, var: &str) {
         self.assign_targets.remove(var);
     }
 
@@ -274,9 +272,10 @@ impl ScopeState {
     }
 
     pub(crate) fn record_go_const_binding(&mut self, go_identifier: String) {
-        if let Some(top) = self.go_const_bindings.last_mut() {
-            top.insert(go_identifier);
-        }
+        self.go_const_bindings
+            .last_mut()
+            .expect("scope state always retains a const frame")
+            .insert(go_identifier);
     }
 
     pub(crate) fn is_go_const_binding(&self, go_identifier: &str) -> bool {
@@ -287,7 +286,6 @@ impl ScopeState {
 }
 
 fn pop_keep_base<T>(stack: &mut Vec<T>) {
-    if stack.len() > 1 {
-        stack.pop();
-    }
+    assert!(stack.len() > 1, "cannot pop a stack's base frame");
+    let _ = stack.pop();
 }
