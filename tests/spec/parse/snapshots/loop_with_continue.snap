@@ -59,7 +59,7 @@ description: |
                                             byte_offset: 29,
                                             byte_length: 11,
                                         },
-                                        call_kind: None,
+                                        call_kind: Unresolved,
                                     },
                                     consequence: Block {
                                         items: [
@@ -80,16 +80,7 @@ description: |
                                             byte_length: 23,
                                         },
                                     },
-                                    alternative: Unit {
-                                        ty: Var {
-                                            id: uninferred,
-                                        },
-                                        span: Span {
-                                            file_id: 0,
-                                            byte_offset: 26,
-                                            byte_length: 38,
-                                        },
-                                    },
+                                    alternative: None,
                                     ty: Var {
                                         id: uninferred,
                                     },
@@ -123,7 +114,7 @@ description: |
                                         byte_offset: 69,
                                         byte_length: 9,
                                     },
-                                    call_kind: None,
+                                    call_kind: Unresolved,
                                 },
                             ],
                             ty: Var {

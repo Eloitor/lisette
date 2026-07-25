@@ -138,7 +138,7 @@ description: |
                                         byte_offset: 58,
                                         byte_length: 8,
                                     },
-                                    call_kind: None,
+                                    call_kind: Unresolved,
                                 },
                             ],
                             ty: Var {
@@ -150,17 +150,7 @@ description: |
                                 byte_length: 19,
                             },
                         },
-                        alternative: Unit {
-                            ty: Var {
-                                id: uninferred,
-                            },
-                            span: Span {
-                                file_id: 0,
-                                byte_offset: 31,
-                                byte_length: 40,
-                            },
-                        },
-                        else_span: None,
+                        alternative: Absent,
                         ty: Var {
                             id: uninferred,
                         },

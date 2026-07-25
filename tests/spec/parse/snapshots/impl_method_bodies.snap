@@ -28,33 +28,34 @@ description: |
             byte_length: 7,
         },
         generics: [],
-        fields: [
-            StructFieldDefinition {
-                doc: None,
-                attributes: [],
-                name: "value",
-                name_span: Span {
-                    file_id: 0,
-                    byte_offset: 20,
-                    byte_length: 5,
-                },
-                annotation: Constructor {
-                    name: "int",
-                    params: [],
-                    span: Span {
+        fields: Record(
+            [
+                StructFieldDefinition {
+                    doc: None,
+                    attributes: [],
+                    name: "value",
+                    name_span: Span {
                         file_id: 0,
-                        byte_offset: 27,
-                        byte_length: 3,
+                        byte_offset: 20,
+                        byte_length: 5,
                     },
+                    annotation: Constructor {
+                        name: "int",
+                        params: [],
+                        span: Span {
+                            file_id: 0,
+                            byte_offset: 27,
+                            byte_length: 3,
+                        },
+                    },
+                    visibility: Private,
+                    ty: Var {
+                        id: uninferred,
+                    },
+                    embedded: false,
                 },
-                visibility: Private,
-                ty: Var {
-                    id: uninferred,
-                },
-                embedded: false,
-            },
-        ],
-        kind: Record,
+            ],
+        ),
         visibility: Private,
         span: Span {
             file_id: 0,
@@ -334,16 +335,7 @@ description: |
                                         byte_length: 23,
                                     },
                                 },
-                                alternative: Unit {
-                                    ty: Var {
-                                        id: uninferred,
-                                    },
-                                    span: Span {
-                                        file_id: 0,
-                                        byte_offset: 144,
-                                        byte_length: 33,
-                                    },
-                                },
+                                alternative: None,
                                 ty: Var {
                                     id: uninferred,
                                 },
