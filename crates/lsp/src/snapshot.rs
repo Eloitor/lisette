@@ -51,7 +51,7 @@ impl AnalysisSnapshot {
             .as_ref()
             .and_then(|p| p.parent().map(|d| d.to_path_buf()));
 
-        for (file_id, file) in &result.files {
+        for (file_id, file) in &result.emit_input.files {
             let uri = if file.module_id == ENTRY_MODULE_ID {
                 if analyzed_filename.as_deref() == Some(&file.name) {
                     analyzed_uri.clone()
@@ -103,7 +103,7 @@ impl AnalysisSnapshot {
         let (file_id, source) = self.sources.iter().find(|(_, source)| &source.uri == uri)?;
         Some(SnapshotDocument {
             file_id: *file_id,
-            file: self.result.files.get(file_id)?,
+            file: self.result.emit_input.files.get(file_id)?,
             line_index: &source.line_index,
         })
     }
@@ -124,7 +124,7 @@ impl AnalysisSnapshot {
     }
 
     pub(crate) fn files(&self) -> &HashMap<u32, File> {
-        &self.result.files
+        &self.result.emit_input.files
     }
 
     pub(crate) fn facts(&self) -> &Facts {
@@ -132,6 +132,6 @@ impl AnalysisSnapshot {
     }
 
     pub(crate) fn definitions(&self) -> &HashMap<Symbol, Definition> {
-        &self.result.definitions
+        &self.result.emit_input.definitions
     }
 }

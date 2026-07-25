@@ -306,7 +306,11 @@ impl LanguageServer for Backend {
                         let first = value.split('.').next().unwrap_or(value);
                         if let Some(span) =
                             lookup_definition_span(first, file, &snapshot).or_else(|| {
-                                resolve_import_span(first, file, &snapshot.result.go_package_names)
+                                resolve_import_span(
+                                    first,
+                                    file,
+                                    &snapshot.result.emit_input.go_package_names,
+                                )
                             })
                             && let Some(source) = snapshot.source(span.file_id)
                         {
@@ -394,7 +398,13 @@ impl LanguageServer for Backend {
 
             syntax::ast::Expression::Identifier { value, .. } => {
                 lookup_definition_span(value, file, &snapshot)
-                    .or_else(|| resolve_import_span(value, file, &snapshot.result.go_package_names))
+                    .or_else(|| {
+                        resolve_import_span(
+                            value,
+                            file,
+                            &snapshot.result.emit_input.go_package_names,
+                        )
+                    })
                     // A dotted callee like `Array.new` doesn't resolve whole, so
                     // fall back to the type word at the cursor (`Array` -> its decl).
                     .or_else(|| resolve_word_at_offset(&file.source, offset, file, &snapshot))
@@ -954,7 +964,7 @@ impl LanguageServer for Backend {
 
         let mut actions: Vec<CodeActionOrCommand> = Vec::new();
 
-        for diagnostic in &snapshot.result.lints {
+        for diagnostic in snapshot.result.lints() {
             if diagnostic.file_id() != Some(file_id) {
                 continue;
             }
@@ -969,7 +979,6 @@ impl LanguageServer for Backend {
 
             let text_edits: Vec<TextEdit> = fix
                 .edits()
-                .iter()
                 .map(|edit| TextEdit {
                     range: line_index.span_to_range(edit.span()),
                     new_text: edit.content().to_string(),
@@ -1023,7 +1032,7 @@ impl LanguageServer for Backend {
 
         if let Some(module_name) = get_module_prefix(&file.source, offset as usize)
             && let Some(imp) = file.imports().iter().find(|imp| {
-                imp.effective_alias(&snapshot.result.go_package_names)
+                imp.effective_alias(&snapshot.result.emit_input.go_package_names)
                     .as_deref()
                     == Some(module_name)
             })
@@ -1179,7 +1188,7 @@ impl LanguageServer for Backend {
 
         for import in file.imports() {
             let alias = import
-                .effective_alias(&snapshot.result.go_package_names)
+                .effective_alias(&snapshot.result.emit_input.go_package_names)
                 .unwrap_or_else(|| import.name.to_string());
             items.push(CompletionItem {
                 label: alias,
