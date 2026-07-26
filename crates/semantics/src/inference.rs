@@ -13,8 +13,8 @@ use crate::cache::{
     CachedModuleBuild, CompiledModule, ModuleInterface, build_cached_module,
     compute_emit_artifact_hash, compute_module_hash, get_dependency_module_hashes,
     go_stdlib::{self, load_cached_go_module},
-    hash_module_source_pair, is_cache_disabled, prelude as prelude_cache,
-    restore_cached_generic_bounds, try_load_cache,
+    hash_module_source_pair, hash_module_source_pair_refs, is_cache_disabled,
+    prelude as prelude_cache, restore_cached_generic_bounds, try_load_cache,
 };
 use crate::checker::infer::InferCtx;
 use crate::checker::{TaskOutput, TaskState};
@@ -256,7 +256,8 @@ pub fn run_inference(input: AnalyzeInput) -> InferenceOutput {
                 CompilePhase::Emit | CompilePhase::Test => Vec::new(),
             };
             if include_test_roots {
-                additional.extend(discovered.test_roots.iter().cloned());
+                additional.extend(discovered.internal_test_roots.iter().cloned());
+                additional.extend(discovered.external_test_roots.iter().cloned());
             }
             Roots {
                 primary: vec![entry_module],
@@ -264,11 +265,11 @@ pub fn run_inference(input: AnalyzeInput) -> InferenceOutput {
             }
         }
         ProjectKind::Library => {
-            let mut additional = if include_test_roots {
-                discovered.test_roots.clone()
-            } else {
-                Vec::new()
-            };
+            let mut additional = Vec::new();
+            if include_test_roots {
+                additional.extend(discovered.internal_test_roots.iter().cloned());
+                additional.extend(discovered.external_test_roots.iter().cloned());
+            }
             additional.push(entry_module);
             Roots {
                 primary: discovered.production_modules.clone(),
@@ -284,6 +285,7 @@ pub fn run_inference(input: AnalyzeInput) -> InferenceOutput {
             loader: Some(input.loader),
             sink: &sink,
             standalone_mode: input.config.standalone_mode,
+            has_project_root: input.project_root.is_some(),
             locator: &input.locator,
             include_tests,
         },
@@ -341,7 +343,7 @@ pub fn run_inference(input: AnalyzeInput) -> InferenceOutput {
         let mut to_infer: Vec<PendingModule> = Vec::new();
         let mut candidates: Vec<CacheCandidate> = Vec::new();
 
-        let source_hashes: HashMap<String, (u64, u64)> =
+        let mut source_hashes: HashMap<String, (u64, u64)> =
             if graph_result.files.len() < PARALLEL_THRESHOLD {
                 graph_result
                     .files
@@ -355,6 +357,17 @@ pub fn run_inference(input: AnalyzeInput) -> InferenceOutput {
                     .map(|(id, files)| (id.clone(), hash_module_source_pair(files)))
                     .collect()
             };
+
+        let entry_files: Vec<&File> = store
+            .get_module(ENTRY_MODULE_ID)
+            .map(|module| module.files.values().collect())
+            .unwrap_or_default();
+        if !entry_files.is_empty() {
+            source_hashes.insert(
+                ENTRY_MODULE_ID.to_string(),
+                hash_module_source_pair_refs(&entry_files),
+            );
+        }
 
         for (topo_rank, module_id) in order.into_iter().enumerate() {
             if module_id.starts_with("go:") {
@@ -376,7 +389,15 @@ pub fn run_inference(input: AnalyzeInput) -> InferenceOutput {
                 continue;
             }
 
-            let files = graph_result.files.remove(&module_id).unwrap_or_default();
+            let mut files = graph_result.files.remove(&module_id).unwrap_or_default();
+            if input.project_root.is_some()
+                && store.project_kind == ProjectKind::Library
+                && crate::loader::is_external_test_module(&module_id)
+            {
+                for file in &mut files {
+                    file.rewrite_import(crate::loader::ROOT_IMPORT, ENTRY_MODULE_ID);
+                }
+            }
             // Production-only hash drives dependents/emit; all-files hash drives own validity.
             let (production_hash, full_hash) = source_hashes
                 .get(&module_id)
@@ -600,13 +621,15 @@ fn load_cache_candidates(
         });
     }
 
-    let display_base = crate::path::DisplayPathBase::new(&project_root.join("src"));
+    let src_base = crate::path::DisplayPathBase::new(&project_root.join("src"));
+    let root_base = crate::path::DisplayPathBase::new(project_root);
     let build = |job: CacheBuildJob| {
         build_cached_module(
             job.module_id,
             job.file_id_base,
             job.interface,
-            &display_base,
+            &src_base,
+            &root_base,
         )
     };
     let built: Vec<CachedModuleBuild> = if build_jobs.len() < PARALLEL_THRESHOLD {

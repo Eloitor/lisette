@@ -179,7 +179,7 @@ impl TaskState {
         {
             self.sink.push(diagnostics::infer::impl_on_foreign_type(
                 type_name,
-                type_module,
+                crate::loader::import_display_name(type_module),
                 *span,
             ));
             return Vec::new();
