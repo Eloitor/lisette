@@ -1573,3 +1573,10 @@ pub fn out_of_domain_value(
             "`{type_display}` has a closed domain (`{valid_display}`) that excludes this value"
         ))
 }
+
+pub fn infallible_assertion(span: &Span) -> LisetteDiagnostic {
+    LisetteDiagnostic::warn("Infallible assertion")
+        .with_lint_code("infallible_assertion")
+        .with_span_label(span, "never fails")
+        .with_help("This assertion cannot catch a regression. Write a useful assertion")
+}
