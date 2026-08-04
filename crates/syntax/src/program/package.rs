@@ -5,23 +5,23 @@ use super::definition::{Definition, Visibility};
 use super::file::File;
 use crate::types::Symbol;
 
-pub type ModuleId = String;
+pub type PackageId = String;
 
 #[derive(Debug, Clone)]
-pub struct Module {
+pub struct Package {
     pub id: String,
     /// file ID -> file. Source and declaration files are classified by [`File::is_d_lis`].
     pub files: HashMap<u32, File>,
     /// qualified name -> definition
     pub definitions: HashMap<Symbol, Definition>,
-    /// Set when an import cycle keeps the module out of inference: nothing
+    /// Set when an import cycle keeps the package out of inference: nothing
     /// registers its files, so its exports are read from syntax.
     pub uninferred_exports: Option<UninferredExports>,
 }
 
 #[derive(Debug, Clone)]
 pub enum UninferredExports {
-    /// Read from the syntax of the module's files.
+    /// Read from the syntax of the package's files.
     Known(HashSet<EcoString>),
     /// A file did not parse, so its declarations cannot be read.
     Unreadable,
@@ -36,9 +36,9 @@ impl UninferredExports {
     }
 }
 
-impl Module {
-    pub fn new(id: &str) -> Module {
-        Module {
+impl Package {
+    pub fn new(id: &str) -> Package {
+        Package {
             id: id.to_string(),
             files: Default::default(),
             definitions: Default::default(),
@@ -46,8 +46,8 @@ impl Module {
         }
     }
 
-    pub fn nominal() -> Module {
-        Module::new("**nominal")
+    pub fn nominal() -> Package {
+        Package::new("**nominal")
     }
 
     pub fn is_public(&self, qualified_name: &str) -> bool {

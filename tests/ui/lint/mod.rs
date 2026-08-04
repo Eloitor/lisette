@@ -5,7 +5,7 @@ use crate::_harness::filesystem::MockFileSystem;
 use crate::_harness::formatting::format_result_diagnostic_for_snapshot;
 use crate::_harness::lint::lint;
 use crate::{assert_diagnostic_count, assert_lint_snapshot, assert_no_lint_warnings};
-use semantics::store::ENTRY_MODULE_ID;
+use semantics::store::ENTRY_PACKAGE_ID;
 
 #[test]
 fn unused_variable() {
@@ -2387,7 +2387,7 @@ fn main() {
 fn replace_count_zero_fires_in_test_file() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         "import \"util\"\n\nfn main() {\n  let _ = util.value()\n}\n",
     );
@@ -2412,7 +2412,7 @@ fn replace_count_zero_fires_in_test_file() {
 fn replace_count_zero_fires_despite_type_error() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 import "go:strings"
@@ -2812,7 +2812,7 @@ fn main() {
 fn redundant_trim_guard_fires_in_test_file() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         "import \"util\"\n\nfn main() {\n  let _ = util.value()\n}\n",
     );
@@ -2837,7 +2837,7 @@ fn redundant_trim_guard_fires_in_test_file() {
 fn redundant_trim_guard_fires_despite_type_error() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 import "go:strings"
@@ -5473,7 +5473,7 @@ fn main() {
 fn impossible_comparison_skips_type_invalid_operand() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 fn main() {
@@ -5505,7 +5505,7 @@ fn main() {
 fn impossible_comparison_non_boolean_conjunct_no_diagnostic() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 fn main() {
@@ -5537,7 +5537,7 @@ fn main() {
 fn impossible_comparison_invalid_comparison_conjunct_no_diagnostic() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 fn main() {
@@ -5570,7 +5570,7 @@ fn main() {
 fn impossible_comparison_invalid_comparison_inside_or_no_diagnostic() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 fn main() {
@@ -5604,7 +5604,7 @@ fn main() {
 fn always_true_disjunction_skips_type_invalid_operand() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 fn main() {
@@ -5636,7 +5636,7 @@ fn main() {
 fn always_true_disjunction_non_boolean_disjunct_no_diagnostic() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 fn main() {
@@ -5668,7 +5668,7 @@ fn main() {
 fn always_true_disjunction_invalid_comparison_disjunct_no_diagnostic() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 fn main() {
@@ -5701,7 +5701,7 @@ fn main() {
 fn redundant_comparison_skips_type_invalid_operand() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 fn main() {
@@ -5733,7 +5733,7 @@ fn main() {
 fn double_comparison_skips_type_invalid_operand() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 fn main() {
@@ -5902,7 +5902,7 @@ fn main() {
 fn double_comparison_distinct_named_string_types_no_diagnostic() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 struct A(string)
@@ -5938,7 +5938,7 @@ fn main() {
 fn double_comparison_named_vs_plain_string_no_diagnostic() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 struct A(string)
@@ -6002,7 +6002,7 @@ fn main() {
 fn impossible_comparison_unsigned_negative_literal_no_diagnostic() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 fn main() {
@@ -6034,7 +6034,7 @@ fn main() {
 fn redundant_comparison_unsigned_negative_literal_no_diagnostic() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 fn main() {
@@ -6066,7 +6066,7 @@ fn main() {
 fn double_comparison_unsigned_negative_literal_no_diagnostic() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 fn main() {
@@ -6098,7 +6098,7 @@ fn main() {
 fn impossible_comparison_overflow_literal_no_diagnostic() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 fn main() {
@@ -6130,7 +6130,7 @@ fn main() {
 fn redundant_comparison_overflow_literal_no_diagnostic() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 fn main() {
@@ -6162,7 +6162,7 @@ fn main() {
 fn double_comparison_int_overflow_literal_no_diagnostic() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 fn main() {
@@ -6194,7 +6194,7 @@ fn main() {
 fn double_comparison_float_overflow_literal_no_diagnostic() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 fn main() {
@@ -6226,7 +6226,7 @@ fn main() {
 fn impossible_comparison_uintptr_operand_no_diagnostic() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 fn get() -> uintptr { panic("x") }
@@ -6260,7 +6260,7 @@ fn main() {
 fn redundant_comparison_uintptr_operand_no_diagnostic() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 fn get() -> uintptr { panic("x") }
@@ -6294,7 +6294,7 @@ fn main() {
 fn double_comparison_uintptr_operand_no_diagnostic() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 fn get() -> uintptr { panic("x") }
@@ -6424,7 +6424,7 @@ fn main() {
 fn bad_bit_mask_defers_relational_to_unsigned_comparison() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 fn main() {
@@ -6655,7 +6655,7 @@ fn main() {
 fn bad_bit_mask_uintptr_operand_no_diagnostic() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 fn main() {
@@ -6797,7 +6797,7 @@ fn main() {
 fn equal_operands_uintptr_arithmetic_no_diagnostic() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 fn main() {
@@ -6829,7 +6829,7 @@ fn main() {
 fn equal_operands_uintptr_alias_bitwise_no_diagnostic() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 type Handle = uintptr
@@ -6863,7 +6863,7 @@ fn main() {
 fn equal_operands_uintptr_newtype_bitwise_no_diagnostic() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 struct Wrapped(uintptr)
@@ -8528,7 +8528,7 @@ fn main() {
 fn needless_continue_fires_in_test_file() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         "import \"util\"\n\nfn main() {\n  let _ = util.value()\n}\n",
     );
@@ -8864,7 +8864,7 @@ fn main() {
 fn unused_import() {
     assert_lint_snapshot!(
         r#"
-import "some/module"
+import "some/package"
 
 fn main() {
   ()
@@ -8932,7 +8932,7 @@ fn main() {
 }
 
 #[test]
-fn redundant_import_alias_on_local_module() {
+fn redundant_import_alias_on_local_package() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
         "models",
@@ -8944,7 +8944,7 @@ pub struct User {
 "#,
     );
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 import models "models"
@@ -8966,7 +8966,7 @@ fn main() {
 }
 
 #[test]
-fn redundant_import_alias_on_nested_module_path() {
+fn redundant_import_alias_on_nested_package_path() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
         "routes/admin",
@@ -8978,7 +8978,7 @@ pub fn dashboard() -> string {
 "#,
     );
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 import admin "routes/admin"
@@ -9000,7 +9000,7 @@ fn main() {
 }
 
 #[test]
-fn redundant_import_alias_silent_for_nested_module_renamed_to_its_parent() {
+fn redundant_import_alias_silent_for_nested_package_renamed_to_its_parent() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
         "routes/admin",
@@ -9012,7 +9012,7 @@ pub fn dashboard() -> string {
 "#,
     );
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 import routes "routes/admin"
@@ -9046,7 +9046,7 @@ pub struct User {
 "#,
     );
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 import models "models"
@@ -9057,7 +9057,7 @@ fn main() {
 "#,
     );
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "helper.lis",
         r#"
 import models "models"
@@ -9106,7 +9106,7 @@ pub struct User {
 "#,
     );
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 import models "models"
@@ -9117,7 +9117,7 @@ fn main() {
 "#,
     );
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "helper.lis",
         r#"
 import models "models"
@@ -9392,7 +9392,7 @@ fn main() {
 }
 
 #[test]
-fn same_named_type_in_other_module_does_not_mask_unused_field() {
+fn same_named_type_in_other_package_does_not_mask_unused_field() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
         "geo",
@@ -9404,7 +9404,7 @@ pub struct Size {
 "#,
     );
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 import "geo"
@@ -9437,7 +9437,7 @@ fn main() {
 }
 
 #[test]
-fn same_named_type_in_other_module_does_not_mask_unused_field_via_embed() {
+fn same_named_type_in_other_package_does_not_mask_unused_field_via_embed() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
         "geo",
@@ -9449,7 +9449,7 @@ pub struct Size {
 "#,
     );
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 import "geo"
@@ -16400,7 +16400,7 @@ fn main() {
 fn printf_verb_mismatch_fires_in_test_file() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         "import \"util\"\n\nfn main() {\n  let _ = util.value()\n}\n",
     );
@@ -16425,7 +16425,7 @@ fn printf_verb_mismatch_fires_in_test_file() {
 fn printf_verb_mismatch_fires_despite_type_error() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 import "go:fmt"
@@ -17468,10 +17468,10 @@ fn main() {
 }
 
 #[test]
-fn allow_suppresses_only_annotated_function_across_module_files() {
+fn allow_suppresses_only_annotated_function_across_package_files() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 #[allow(unused_function)]
@@ -17480,7 +17480,7 @@ fn allowed_helper() {}
 fn main() {}
 "#,
     );
-    fs.add_file(ENTRY_MODULE_ID, "other.lis", "fn warned_helper() {}\n");
+    fs.add_file(ENTRY_PACKAGE_ID, "other.lis", "fn warned_helper() {}\n");
     let result = compile_check(fs);
     let unused_functions: Vec<_> = result
         .lints()
@@ -17499,7 +17499,7 @@ fn main() {}
 fn allow_unused_type_does_not_suppress_naming_lint_on_struct() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 #[allow(non_pascal_case_type)]
@@ -17526,7 +17526,7 @@ fn main() {
 fn allow_does_not_suppress_internal_type_leak() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 struct Secret { pub x: int }
@@ -17946,7 +17946,7 @@ fn main() {
 }
 
 #[test]
-fn redundant_closure_module_member() {
+fn redundant_closure_package_member() {
     assert_lint_snapshot!(
         r#"
 import "go:strconv"
@@ -19703,7 +19703,7 @@ fn main() {
 fn manual_extend_fires_despite_type_error() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 fn main() {
@@ -19741,7 +19741,7 @@ fn main() {
 fn manual_extend_fires_in_test_file() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         "import \"util\"\n\nfn main() {\n  let _ = util.value()\n}\n",
     );
@@ -19907,7 +19907,7 @@ fn main() {
   }
 }
 "#;
-    fs.add_file(ENTRY_MODULE_ID, "main.lis", source);
+    fs.add_file(ENTRY_PACKAGE_ID, "main.lis", source);
 
     let result = compile_check(fs);
     assert!(
@@ -19957,7 +19957,7 @@ fn main() {
   }
 }
 "#;
-    fs.add_file(ENTRY_MODULE_ID, "main.lis", source);
+    fs.add_file(ENTRY_PACKAGE_ID, "main.lis", source);
 
     let result = compile_check(fs);
     assert!(
@@ -20006,7 +20006,7 @@ fn main() {
   }
 }
 "#;
-    fs.add_file(ENTRY_MODULE_ID, "main.lis", source);
+    fs.add_file(ENTRY_PACKAGE_ID, "main.lis", source);
 
     let result = compile_check(fs);
     assert!(
@@ -20051,7 +20051,7 @@ fn main() {
   describe(models.Model { value: 1 })
 }
 "#;
-    fs.add_file(ENTRY_MODULE_ID, "main.lis", source);
+    fs.add_file(ENTRY_PACKAGE_ID, "main.lis", source);
 
     let result = compile_check(fs);
     assert!(
@@ -20103,7 +20103,7 @@ fn main() {
   let _a = tvcall.Tv.A(1)
 }
 "#;
-    fs.add_file(ENTRY_MODULE_ID, "main.lis", source);
+    fs.add_file(ENTRY_PACKAGE_ID, "main.lis", source);
 
     let result = compile_check(fs);
     assert!(
@@ -20152,7 +20152,7 @@ fn main() {
   let _a = tvcall.Tv.A(1)
 }
 "#;
-    fs.add_file(ENTRY_MODULE_ID, "main.lis", source);
+    fs.add_file(ENTRY_PACKAGE_ID, "main.lis", source);
 
     let result = compile_check(fs);
     assert!(
@@ -20190,7 +20190,7 @@ fn main() {
   let _m = limits.MAX
 }
 "#;
-    fs.add_file(ENTRY_MODULE_ID, "main.lis", source);
+    fs.add_file(ENTRY_PACKAGE_ID, "main.lis", source);
 
     let result = compile_check(fs);
     assert!(
@@ -20250,7 +20250,7 @@ fn main() {
   let _b = foreign.T.mk()
 }
 "#;
-    fs.add_file(ENTRY_MODULE_ID, "main.lis", source);
+    fs.add_file(ENTRY_PACKAGE_ID, "main.lis", source);
 
     let result = compile_check(fs);
     assert!(
@@ -20321,7 +20321,7 @@ fn main() {
   let _b = foreign.T.mk()
 }
 "#;
-    fs.add_file(ENTRY_MODULE_ID, "main.lis", source);
+    fs.add_file(ENTRY_PACKAGE_ID, "main.lis", source);
 
     let result = compile_check(fs);
     assert!(
@@ -20405,7 +20405,7 @@ fn main() {
   ()
 }
 "#;
-    fs.add_file(ENTRY_MODULE_ID, "main.lis", source);
+    fs.add_file(ENTRY_PACKAGE_ID, "main.lis", source);
 
     let result = compile_check(fs);
     assert!(
@@ -20455,7 +20455,7 @@ fn main() {
   ()
 }
 "#;
-    fs.add_file(ENTRY_MODULE_ID, "main.lis", source);
+    fs.add_file(ENTRY_PACKAGE_ID, "main.lis", source);
 
     let result = compile_check(fs);
     assert!(
@@ -20783,7 +20783,7 @@ fn main() {
 fn float_cmp_distinct_newtypes_no_diagnostic() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 struct Distance(float64)
@@ -20961,7 +20961,7 @@ fn main() {
 fn float_equality_without_abs_distinct_newtypes_no_diagnostic() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 struct Distance(float64)
@@ -21027,7 +21027,7 @@ fn main() {
 fn float_cmp_plain_vs_newtype_no_diagnostic() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 struct Distance(float64)
@@ -21757,7 +21757,7 @@ fn main() {
   let _ = o.map(|x| x * 2).unwrap_or(make_default())
 }
 "#;
-    fs.add_file(ENTRY_MODULE_ID, "main.lis", source);
+    fs.add_file(ENTRY_PACKAGE_ID, "main.lis", source);
 
     let result = compile_check(fs);
     let map_unwrap_or = result
@@ -22099,7 +22099,7 @@ fn main() {
   let _: Option<Printable> = r.map_or(None, |x| Some(x))
 }
 "#;
-    fs.add_file(ENTRY_MODULE_ID, "main.lis", source);
+    fs.add_file(ENTRY_PACKAGE_ID, "main.lis", source);
 
     let result = compile_check(fs);
     let map_or_none = result
@@ -22617,7 +22617,7 @@ fn main() {
   let _o = Other { v: 3 }
 }
 "#;
-    fs.add_file(ENTRY_MODULE_ID, "main.lis", source);
+    fs.add_file(ENTRY_PACKAGE_ID, "main.lis", source);
 
     let result = compile_check(fs);
     assert!(
@@ -22667,7 +22667,7 @@ fn main() {
   let _ = check(p)
 }
 "#;
-    fs.add_file(ENTRY_MODULE_ID, "main.lis", source);
+    fs.add_file(ENTRY_PACKAGE_ID, "main.lis", source);
 
     let result = compile_check(fs);
     assert!(
@@ -22700,7 +22700,7 @@ fn main() {
   file.close()
 }
 "#;
-    fs.add_file(ENTRY_MODULE_ID, "main.lis", source);
+    fs.add_file(ENTRY_PACKAGE_ID, "main.lis", source);
 
     let result = compile_check(fs);
     assert!(
@@ -22745,7 +22745,7 @@ fn main() {
   let _ = Inner { x: 3 }
 }
 "#;
-    fs.add_file(ENTRY_MODULE_ID, "main.lis", source);
+    fs.add_file(ENTRY_PACKAGE_ID, "main.lis", source);
 
     let result = compile_check(fs);
     assert!(
@@ -22788,7 +22788,7 @@ fn main() {
   let _eq = a.equals(b)
 }
 "#;
-    fs.add_file(ENTRY_MODULE_ID, "main.lis", source);
+    fs.add_file(ENTRY_PACKAGE_ID, "main.lis", source);
 
     let result = compile_check(fs);
     assert!(
@@ -22837,7 +22837,7 @@ fn main() {
   let _ = cmp(&xs, ys)
 }
 "#;
-    fs.add_file(ENTRY_MODULE_ID, "main.lis", source);
+    fs.add_file(ENTRY_PACKAGE_ID, "main.lis", source);
 
     let result = compile_check(fs);
     assert!(
@@ -22882,7 +22882,7 @@ fn main() {
   let _ = cmp(H(&xs), H(&ys))
 }
 "#;
-    fs.add_file(ENTRY_MODULE_ID, "main.lis", source);
+    fs.add_file(ENTRY_PACKAGE_ID, "main.lis", source);
 
     let result = compile_check(fs);
     assert!(
@@ -22935,7 +22935,7 @@ fn main() {
   let _o = Other { v: 2 }
 }
 "#;
-    fs.add_file(ENTRY_MODULE_ID, "main.lis", source);
+    fs.add_file(ENTRY_PACKAGE_ID, "main.lis", source);
 
     let result = compile_check(fs);
     assert!(
@@ -22987,7 +22987,7 @@ fn main() {
   let _w = Wrap { holder: Holder { item: Leaf { v: 1 } } }
 }
 "#;
-    fs.add_file(ENTRY_MODULE_ID, "main.lis", source);
+    fs.add_file(ENTRY_PACKAGE_ID, "main.lis", source);
 
     let result = compile_check(fs);
     assert!(
@@ -23037,7 +23037,7 @@ fn main() {
   let _ = check(p)
 }
 "#;
-    fs.add_file(ENTRY_MODULE_ID, "main.lis", source);
+    fs.add_file(ENTRY_PACKAGE_ID, "main.lis", source);
 
     let result = compile_check(fs);
     assert!(
@@ -23071,7 +23071,7 @@ impl<U: Parent<U>> Box<U> {
 
 fn main() {}
 "#;
-    fs.add_file(ENTRY_MODULE_ID, "main.lis", source);
+    fs.add_file(ENTRY_PACKAGE_ID, "main.lis", source);
 
     let result = compile_check(fs);
     let codes: Vec<&str> = result.lints().iter().filter_map(|l| l.code_str()).collect();
@@ -23113,7 +23113,7 @@ fn main() {
   let _ = Inner { x: 2 }
 }
 "#;
-    fs.add_file(ENTRY_MODULE_ID, "main.lis", source);
+    fs.add_file(ENTRY_PACKAGE_ID, "main.lis", source);
 
     let result = compile_check(fs);
     assert!(
@@ -23147,7 +23147,7 @@ fn main() {
   let _ = T { x: 2 }
 }
 "#;
-    fs.add_file(ENTRY_MODULE_ID, "main.lis", source);
+    fs.add_file(ENTRY_PACKAGE_ID, "main.lis", source);
 
     let result = compile_check(fs);
     assert!(
@@ -23193,7 +23193,7 @@ fn main() {
   let _ = Inner { x: 2 }
 }
 "#;
-    fs.add_file(ENTRY_MODULE_ID, "main.lis", source);
+    fs.add_file(ENTRY_PACKAGE_ID, "main.lis", source);
 
     let result = compile_check(fs);
     assert!(
@@ -23498,7 +23498,7 @@ pub fn f(c: int) -> int {
   }
 }
 "#;
-    fs.add_file(ENTRY_MODULE_ID, "main.lis", source);
+    fs.add_file(ENTRY_PACKAGE_ID, "main.lis", source);
 
     let result = compile_check(fs);
     assert!(
@@ -23545,7 +23545,7 @@ pub fn f(o: Option<int>) -> int {
   }
 }
 "#;
-    fs.add_file(ENTRY_MODULE_ID, "main.lis", source);
+    fs.add_file(ENTRY_PACKAGE_ID, "main.lis", source);
 
     let result = compile_check(fs);
     assert!(
@@ -23882,7 +23882,7 @@ pub fn f(s: Single) {
   }
 }
 "#;
-    fs.add_file(ENTRY_MODULE_ID, "main.lis", source);
+    fs.add_file(ENTRY_PACKAGE_ID, "main.lis", source);
 
     let result = compile_check(fs);
     let codes: Vec<&str> = result.lints().iter().filter_map(|l| l.code_str()).collect();
@@ -24023,7 +24023,7 @@ fn main() {
   let a = a;
 }
 "#;
-    fs.add_file(ENTRY_MODULE_ID, "main.lis", source);
+    fs.add_file(ENTRY_PACKAGE_ID, "main.lis", source);
 
     let result = compile_check(fs);
     let codes: Vec<&str> = result.lints().iter().filter_map(|l| l.code_str()).collect();
@@ -24881,7 +24881,7 @@ fn main() {
 fn unconditional_recursion_return_form() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 fn spin(n: int) -> int {
@@ -25490,7 +25490,7 @@ fn main() {
 fn unconditional_recursion_panic_before_self_call_stays_silent() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 fn crash(n: int) -> int {
@@ -25518,7 +25518,7 @@ fn main() {
 fn unconditional_recursion_never_call_before_self_call_stays_silent() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 fn fail(msg: string) -> Never {
@@ -25550,7 +25550,7 @@ fn main() {
 fn unconditional_recursion_fires_alongside_unrelated_type_error() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 fn spin(n: int) -> int {
@@ -25586,7 +25586,7 @@ fn main() {
 fn unconditional_recursion_fires_in_test_file() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 fn main() {
@@ -25595,7 +25595,7 @@ fn main() {
 "#,
     );
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "helpers.test.lis",
         r#"
 fn grow(n: int) -> int {
@@ -25622,7 +25622,7 @@ fn test_growth() {
 fn unconditional_recursion_unresolved_call_before_self_call_stays_silent() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 fn crash(n: int) -> int {
@@ -25777,7 +25777,7 @@ fn main() {
 fn unconditional_recursion_diverging_task_argument_stays_silent() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 fn fail(msg: string) -> Never {
@@ -25813,7 +25813,7 @@ fn main() {
 fn unconditional_recursion_diverging_defer_argument_stays_silent() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 fn fail(msg: string) -> Never {
@@ -25940,7 +25940,7 @@ fn main() {
 fn duplicate_map_keys_fires_in_test_file() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         "import \"util\"\n\nfn main() {\n  let _ = util.value()\n}\n",
     );
@@ -25965,7 +25965,7 @@ fn duplicate_map_keys_fires_in_test_file() {
 fn duplicate_map_keys_fires_despite_type_error() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         r#"
 fn main() {
@@ -26108,7 +26108,7 @@ fn main() {
 fn infallible_assertion_fires_in_test_file() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         "import \"util\"\n\nfn main() {\n  let _ = util.value()\n}\n",
     );
@@ -26137,7 +26137,7 @@ fn infallible_assertion_fires_in_test_file() {
 fn infallible_assertion_fires_with_parens() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         "import \"util\"\n\nfn main() {\n  let _ = util.value()\n}\n",
     );
@@ -26166,7 +26166,7 @@ fn infallible_assertion_fires_with_parens() {
 fn infallible_assertion_false_no_warning() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         "import \"util\"\n\nfn main() {\n  let _ = util.value()\n}\n",
     );
@@ -26191,7 +26191,7 @@ fn infallible_assertion_false_no_warning() {
 fn infallible_assertion_bound_value_no_warning() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         "import \"util\"\n\nfn main() {\n  let _ = util.value()\n}\n",
     );
@@ -26216,7 +26216,7 @@ fn infallible_assertion_bound_value_no_warning() {
 fn infallible_assertion_compound_disjunction_no_warning() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         "import \"util\"\n\nfn main() {\n  let _ = util.value()\n}\n",
     );
@@ -26248,7 +26248,7 @@ fn infallible_assertion_compound_disjunction_no_warning() {
 fn infallible_assertion_silent_outside_test_file() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         "fn helper() {\n  assert true\n}\n\nfn main() {\n  helper()\n}\n",
     );
@@ -26275,7 +26275,7 @@ fn infallible_assertion_silent_outside_test_file() {
 fn infallible_assertion_silent_for_non_test_helper_in_test_file() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         "import \"util\"\n\nfn main() {\n  let _ = util.value()\n}\n",
     );
@@ -26304,7 +26304,7 @@ fn infallible_assertion_silent_for_non_test_helper_in_test_file() {
 fn infallible_assertion_fires_for_test_context_param_helper() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         "import \"util\"\n\nfn main() {\n  let _ = util.value()\n}\n",
     );
@@ -26333,7 +26333,7 @@ fn infallible_assertion_fires_for_test_context_param_helper() {
 fn infallible_assertion_fires_in_nested_function_inheriting_context() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         "import \"util\"\n\nfn main() {\n  let _ = util.value()\n}\n",
     );
@@ -26362,7 +26362,7 @@ fn infallible_assertion_fires_in_nested_function_inheriting_context() {
 fn infallible_assertion_fires_inside_compound_assert_operand() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         "import \"util\"\n\nfn main() {\n  let _ = util.value()\n}\n",
     );
@@ -26528,7 +26528,7 @@ fn shadowed_capture_does_not_double_report_an_import_alias() {
     let mut fs = MockFileSystem::new();
     fs.add_file("util", "util.lis", "pub fn value() -> int { 1 }\n");
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
         "import \"util\"\n\nfn main() {\n  let xs = [1, 2, 3]\n  let _ = xs.map(|util| util + 1)\n  let _ = util.value()\n}\n",
     );

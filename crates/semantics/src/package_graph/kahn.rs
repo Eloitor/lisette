@@ -2,23 +2,23 @@ use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
 use syntax::ast::Span;
 
-use super::{DependencyGraph, ModuleId};
+use super::{DependencyGraph, PackageId};
 
 #[derive(Debug, Clone)]
 pub struct CycleHop {
-    pub module: ModuleId,
+    pub package: PackageId,
     pub span: Span,
 }
 
 pub type Cycle = Vec<CycleHop>;
 
-pub fn topological_sort(edges: &DependencyGraph) -> (Vec<ModuleId>, Vec<Cycle>) {
-    let mut in_degree: HashMap<ModuleId, usize> = HashMap::default();
+pub fn topological_sort(edges: &DependencyGraph) -> (Vec<PackageId>, Vec<Cycle>) {
+    let mut in_degree: HashMap<PackageId, usize> = HashMap::default();
     let mut order = Vec::new();
 
-    for module in edges.modules() {
-        in_degree.entry(module.clone()).or_insert(0);
-        for import in edges.dependencies(module) {
+    for package in edges.packages() {
+        in_degree.entry(package.clone()).or_insert(0);
+        for import in edges.dependencies(package) {
             *in_degree.entry(import.clone()).or_insert(0) += 1;
         }
     }
@@ -31,10 +31,10 @@ pub fn topological_sort(edges: &DependencyGraph) -> (Vec<ModuleId>, Vec<Cycle>) 
 
     queue.sort();
 
-    while let Some(module) = queue.pop() {
-        order.push(module.clone());
+    while let Some(package) = queue.pop() {
+        order.push(package.clone());
 
-        for import in edges.dependencies(&module) {
+        for import in edges.dependencies(&package) {
             if let Some(degree) = in_degree.get_mut(import) {
                 *degree -= 1;
                 if *degree == 0 {
@@ -56,10 +56,10 @@ pub fn topological_sort(edges: &DependencyGraph) -> (Vec<ModuleId>, Vec<Cycle>) 
     (order, cycles)
 }
 
-fn find_cycles(edges: &DependencyGraph, processed: &[ModuleId]) -> Vec<Cycle> {
+fn find_cycles(edges: &DependencyGraph, processed: &[PackageId]) -> Vec<Cycle> {
     let processed_set: HashSet<_> = processed.iter().collect();
     let unprocessed: Vec<_> = edges
-        .modules()
+        .packages()
         .filter(|k| !processed_set.contains(k))
         .collect();
 
@@ -71,7 +71,7 @@ fn find_cycles(edges: &DependencyGraph, processed: &[ModuleId]) -> Vec<Cycle> {
             continue;
         }
 
-        let mut stack: Vec<(&ModuleId, Cycle)> = vec![(start, Vec::new())];
+        let mut stack: Vec<(&PackageId, Cycle)> = vec![(start, Vec::new())];
 
         while let Some((node, path)) = stack.pop() {
             if !visited.insert(node.clone()) {
@@ -80,17 +80,17 @@ fn find_cycles(edges: &DependencyGraph, processed: &[ModuleId]) -> Vec<Cycle> {
 
             for (import, span) in edges.imports(node) {
                 let hop = CycleHop {
-                    module: node.clone(),
+                    package: node.clone(),
                     span,
                 };
                 let closes_on = path
                     .iter()
                     .chain([&hop])
-                    .position(|walked| &walked.module == import);
+                    .position(|walked| &walked.package == import);
                 if let Some(position) = closes_on {
                     let mut cycle: Cycle = path[position..].to_vec();
                     cycle.push(hop);
-                    rotate_to_first_module(&mut cycle);
+                    rotate_to_first_package(&mut cycle);
                     cycles.push(cycle);
                 } else if !visited.contains(import) {
                     let mut extended = path.clone();
@@ -105,11 +105,11 @@ fn find_cycles(edges: &DependencyGraph, processed: &[ModuleId]) -> Vec<Cycle> {
 }
 
 /// So the reported chain does not depend on where the walk started.
-fn rotate_to_first_module(cycle: &mut Cycle) {
+fn rotate_to_first_package(cycle: &mut Cycle) {
     if let Some((position, _)) = cycle
         .iter()
         .enumerate()
-        .min_by(|(_, left), (_, right)| left.module.cmp(&right.module))
+        .min_by(|(_, left), (_, right)| left.package.cmp(&right.package))
     {
         cycle.rotate_left(position);
     }

@@ -2,8 +2,8 @@ use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
 use diagnostics::LocalSink;
 use semantics::AnalysisScope;
-use semantics::module_graph::kahn::topological_sort;
-use semantics::module_graph::{DependencyGraph, ModuleGraphOptions, Roots, build_module_graph};
+use semantics::package_graph::kahn::topological_sort;
+use semantics::package_graph::{DependencyGraph, PackageGraphOptions, Roots, build_package_graph};
 use semantics::store::Store;
 
 use crate::_harness::filesystem::MockFileSystem;
@@ -29,8 +29,8 @@ fn graph_options<'a>(
     sink: &'a LocalSink,
     locator: &'a deps::TypedefLocator,
     scope: &'a AnalysisScope,
-) -> ModuleGraphOptions<'a> {
-    ModuleGraphOptions {
+) -> PackageGraphOptions<'a> {
+    PackageGraphOptions {
         loader: Some(loader),
         sink,
         scope,
@@ -127,7 +127,7 @@ fn test_only_imports_excluded_from_production_edges() {
     let mut store = Store::new();
 
     let sink = LocalSink::new();
-    let result = build_module_graph(
+    let result = build_package_graph(
         &mut store,
         roots("main"),
         graph_options(&fs, &sink, &default_resolver(), &PROJECT_SCOPE),
@@ -152,7 +152,7 @@ fn test_only_imports_excluded_from_production_edges() {
 }
 
 #[test]
-fn production_import_classification_wins_when_tests_import_the_same_module() {
+fn production_import_classification_wins_when_tests_import_the_same_package() {
     let mut fs = MockFileSystem::new();
     fs.add_file("main", "main.lis", r#"import "fixture""#);
     fs.add_file("main", "main.test.lis", r#"import "fixture""#);
@@ -160,7 +160,7 @@ fn production_import_classification_wins_when_tests_import_the_same_module() {
 
     let mut store = Store::new();
     let sink = LocalSink::new();
-    let result = build_module_graph(
+    let result = build_package_graph(
         &mut store,
         roots("main"),
         graph_options(&fs, &sink, &default_resolver(), &PROJECT_SCOPE),
@@ -182,7 +182,7 @@ fn graph_simple_dependency() {
     let mut store = Store::new();
 
     let sink = LocalSink::new();
-    let result = build_module_graph(
+    let result = build_package_graph(
         &mut store,
         roots("main"),
         graph_options(&fs, &sink, &default_resolver(), &PROJECT_SCOPE),
@@ -200,14 +200,14 @@ fn graph_simple_dependency() {
 }
 
 #[test]
-fn graph_missing_module() {
+fn graph_missing_package() {
     let mut fs = MockFileSystem::new();
     fs.add_file("main", "main.lis", r#"import "missing""#);
 
     let mut store = Store::new();
 
     let sink = LocalSink::new();
-    let _result = build_module_graph(
+    let _result = build_package_graph(
         &mut store,
         roots("main"),
         graph_options(&fs, &sink, &default_resolver(), &PROJECT_SCOPE),
@@ -226,7 +226,7 @@ fn graph_cycle_detection() {
     let mut store = Store::new();
 
     let sink = LocalSink::new();
-    let result = build_module_graph(
+    let result = build_package_graph(
         &mut store,
         roots("a"),
         graph_options(&fs, &sink, &default_resolver(), &PROJECT_SCOPE),
@@ -244,18 +244,18 @@ fn graph_cycle_carries_the_span_of_every_hop() {
     let mut store = Store::new();
 
     let sink = LocalSink::new();
-    let result = build_module_graph(
+    let result = build_package_graph(
         &mut store,
         roots("a"),
         graph_options(&fs, &sink, &default_resolver(), &PROJECT_SCOPE),
     );
 
     let cycle = result.cycles.first().expect("the cycle must be detected");
-    let modules: Vec<&str> = cycle.iter().map(|hop| hop.module.as_str()).collect();
+    let packages: Vec<&str> = cycle.iter().map(|hop| hop.package.as_str()).collect();
     assert_eq!(
-        modules,
+        packages,
         vec!["a", "b"],
-        "a cycle starts at its first module"
+        "a cycle starts at its first package"
     );
     for hop in cycle {
         assert_eq!(
@@ -269,7 +269,7 @@ fn graph_cycle_carries_the_span_of_every_hop() {
     );
 }
 
-/// Every way an importer can name something in a module the cycle dropped.
+/// Every way an importer can name something in a package the cycle dropped.
 fn analyze_importer_of_cycle(entry_source: &str) -> passes::Analysis {
     use passes::analyze;
     use semantics::loader::MemoryLoader;
@@ -355,9 +355,9 @@ fn cycle_suppresses_the_name_errors_it_causes_in_importers() {
     );
 }
 
-/// A name the dropped module never declared is the caller's own mistake.
+/// A name the dropped package never declared is the caller's own mistake.
 #[test]
-fn cycle_still_reports_names_the_dropped_module_never_declared() {
+fn cycle_still_reports_names_the_dropped_package_never_declared() {
     let output = analyze_importer_of_cycle(
         "import \"alpha\"\n\
          \n\
@@ -381,7 +381,7 @@ fn cycle_still_reports_names_the_dropped_module_never_declared() {
         vec![
             "resolve.import_cycle",
             "resolve.name_not_found",
-            "resolve.not_found_in_module",
+            "resolve.not_found_in_package",
             "resolve.struct_not_found",
             "resolve.type_not_found",
             "resolve.variant_not_found",
@@ -471,7 +471,7 @@ fn cycle_keeps_the_unrelated_errors_of_an_importer() {
     );
 }
 
-/// An unregistered `go:` module would reach the shared stdlib cache empty.
+/// An unregistered `go:` package would reach the shared stdlib cache empty.
 #[test]
 fn cycle_keeps_unregistered_go_modules_out_of_the_store() {
     use passes::analyze;
@@ -510,10 +510,10 @@ fn cycle_keeps_unregistered_go_modules_out_of_the_store() {
     });
 
     assert!(
-        output.emit_input.go_module_ids.is_empty(),
-        "`go:fmt` is imported only by a module the cycle dropped, so it is never \
+        output.emit_input.go_package_ids.is_empty(),
+        "`go:fmt` is imported only by a package the cycle dropped, so it is never \
          registered and must not reach the store: {:?}",
-        output.emit_input.go_module_ids,
+        output.emit_input.go_package_ids,
     );
     assert!(
         output
@@ -533,7 +533,7 @@ fn additional_roots_widen_graph_but_not_reachable_set() {
     let mut store = Store::new();
 
     let sink = LocalSink::new();
-    let result = build_module_graph(
+    let result = build_package_graph(
         &mut store,
         Roots {
             primary: vec!["main".to_string()],
@@ -543,7 +543,7 @@ fn additional_roots_widen_graph_but_not_reachable_set() {
     );
 
     assert!(result.order.iter().any(|m| m == "orphan"));
-    assert!(result.dependencies.contains_module("orphan"));
+    assert!(result.dependencies.contains_package("orphan"));
     assert!(result.files.contains_key("orphan"));
     assert!(
         !result.primary_reachable.contains("orphan"),
@@ -563,7 +563,7 @@ fn empty_additional_leaves_orphan_out_of_graph() {
     let mut store = Store::new();
 
     let sink = LocalSink::new();
-    let result = build_module_graph(
+    let result = build_package_graph(
         &mut store,
         roots("main"),
         graph_options(&fs, &sink, &default_resolver(), &PROJECT_SCOPE),
@@ -580,7 +580,7 @@ fn zero_primary_roots_begins_with_additional() {
     let mut store = Store::new();
 
     let sink = LocalSink::new();
-    let result = build_module_graph(
+    let result = build_package_graph(
         &mut store,
         Roots {
             primary: vec![],
@@ -627,9 +627,9 @@ fn check_analyzes_orphan_and_surfaces_its_error() {
     });
 
     assert!(
-        output.unreachable_modules.iter().any(|m| m == "orphan"),
+        output.unreachable_packages.iter().any(|m| m == "orphan"),
         "orphan must be reported as unreachable, got: {:?}",
-        output.unreachable_modules
+        output.unreachable_packages
     );
     assert!(
         output
@@ -642,7 +642,7 @@ fn check_analyzes_orphan_and_surfaces_its_error() {
 }
 
 #[test]
-fn check_analyzes_tests_in_declaration_only_module() {
+fn check_analyzes_tests_in_declaration_only_package() {
     use passes::analyze;
     use semantics::loader::MemoryLoader;
     use semantics::{AnalysisScope, AnalyzeInput, CompilePhase, EntryFile};
@@ -679,27 +679,27 @@ fn check_analyzes_tests_in_declaration_only_module() {
             .errors()
             .iter()
             .any(|e| e.code_str() == Some("infer.type_mismatch")),
-        "a test in a declaration-plus-test module must be checked: {:?}",
+        "a test in a declaration-plus-test package must be checked: {:?}",
         output.errors()
     );
 }
 
 #[test]
-fn graph_script_third_party_go_import_uses_module_not_found() {
+fn graph_script_third_party_go_import_uses_package_not_found() {
     let mut fs = MockFileSystem::new();
     fs.add_file("main", "main.lis", r#"import "go:github.com/gorilla/mux""#);
 
     let mut store = Store::new();
 
     let sink = LocalSink::new();
-    let _result = build_module_graph(
+    let _result = build_package_graph(
         &mut store,
         roots("main"),
         graph_options(&fs, &sink, &default_resolver(), &SCRIPT_SCOPE),
     );
 
     assert!(sink.has_errors());
-    assert!(has_diagnostic_code(&sink, "resolve.module_not_found"));
+    assert!(has_diagnostic_code(&sink, "resolve.package_not_found"));
 }
 
 #[test]
@@ -710,7 +710,7 @@ fn graph_project_third_party_go_import_undeclared() {
     let mut store = Store::new();
 
     let sink = LocalSink::new();
-    let _result = build_module_graph(
+    let _result = build_package_graph(
         &mut store,
         roots("main"),
         graph_options(&fs, &sink, &default_resolver(), &PROJECT_SCOPE),
@@ -740,7 +740,7 @@ fn graph_declared_dep_missing_typedef() {
     let resolver = deps::TypedefLocator::new(go_deps, None, stdlib::Target::host());
 
     let sink = LocalSink::new();
-    let _result = build_module_graph(
+    let _result = build_package_graph(
         &mut store,
         roots("main"),
         graph_options(&fs, &sink, &resolver, &PROJECT_SCOPE),
@@ -784,7 +784,7 @@ fn graph_subpackage_missing_typedef_points_at_add() {
     let resolver = deps::TypedefLocator::new(go_deps, None, stdlib::Target::host());
 
     let sink = LocalSink::new();
-    let _result = build_module_graph(
+    let _result = build_package_graph(
         &mut store,
         roots("main"),
         graph_options(&fs, &sink, &resolver, &PROJECT_SCOPE),
@@ -812,17 +812,17 @@ fn graph_subpackage_missing_typedef_points_at_add() {
     );
     assert!(
         !help.contains("lis sync") && !help.contains("lis check"),
-        "subpackage variant must not suggest `lis sync` or `lis check` — neither regenerates a missing subpackage typedef when the module dir already contains the root .d.lis, got: {help}",
+        "subpackage variant must not suggest `lis sync` or `lis check`: neither regenerates a missing subpackage typedef when the module dir already contains the root .d.lis, got: {help}",
     );
 }
 
 #[test]
-fn store_get_definition_domain_style_go_module() {
+fn store_get_definition_domain_style_go_package() {
     let mut store = Store::new();
-    store.add_module("go:github.com/gorilla/mux");
+    store.add_package("go:github.com/gorilla/mux");
 
-    let module = store.get_module_mut("go:github.com/gorilla/mux").unwrap();
-    module.definitions.insert(
+    let package = store.get_package_mut("go:github.com/gorilla/mux").unwrap();
+    package.definitions.insert(
         "go:github.com/gorilla/mux.Router".into(),
         syntax::program::Definition {
             visibility: syntax::program::Visibility::Public,
@@ -844,39 +844,39 @@ fn store_get_definition_domain_style_go_module() {
     let def = store.get_definition("go:github.com/gorilla/mux.Router");
     assert!(
         def.is_some(),
-        "get_definition must resolve domain-style Go module qualified names"
+        "get_definition must resolve domain-style Go package qualified names"
     );
 }
 
 #[test]
-fn store_module_for_qualified_name_domain_style() {
+fn store_package_for_qualified_name_domain_style() {
     let mut store = Store::new();
-    store.add_module("go:github.com/gorilla/mux");
-    store.add_module("go:net/http");
-    store.add_module("mymod");
+    store.add_package("go:github.com/gorilla/mux");
+    store.add_package("go:net/http");
+    store.add_package("mymod");
 
     assert_eq!(
-        store.module_for_qualified_name("go:github.com/gorilla/mux.Router"),
+        store.package_for_qualified_name("go:github.com/gorilla/mux.Router"),
         Some("go:github.com/gorilla/mux"),
     );
     assert_eq!(
-        store.module_for_qualified_name("go:net/http.Request"),
+        store.package_for_qualified_name("go:net/http.Request"),
         Some("go:net/http"),
     );
     assert_eq!(
-        store.module_for_qualified_name("mymod.MyType"),
+        store.package_for_qualified_name("mymod.MyType"),
         Some("mymod"),
     );
     assert_eq!(
-        store.module_for_qualified_name("go:github.com/gorilla/mux.Method.Get"),
+        store.package_for_qualified_name("go:github.com/gorilla/mux.Method.Get"),
         Some("go:github.com/gorilla/mux"),
     );
 }
 
 #[test]
-fn stdlib_cache_excludes_third_party_modules() {
-    // The stdlib cache save filters modules by id.starts_with("go:") and
-    // !id.contains('/') after stripping "go:". Third-party modules like
+fn stdlib_cache_excludes_third_party_packages() {
+    // The stdlib cache save filters packages by id.starts_with("go:") and
+    // !id.contains('/') after stripping "go:". Third-party packages like
     // "go:github.com/gorilla/mux" contain '/' and must be excluded.
     let third_party = "go:github.com/gorilla/mux";
     let stdlib = "go:net/http";
@@ -890,32 +890,32 @@ fn stdlib_cache_excludes_third_party_modules() {
 }
 
 #[test]
-fn store_module_for_qualified_name_major_version_suffix() {
+fn store_package_for_qualified_name_major_version_suffix() {
     let mut store = Store::new();
-    store.add_module("go:github.com/jackc/pgx/v5");
+    store.add_package("go:github.com/jackc/pgx/v5");
 
     assert_eq!(
-        store.module_for_qualified_name("go:github.com/jackc/pgx/v5.Conn"),
+        store.package_for_qualified_name("go:github.com/jackc/pgx/v5.Conn"),
         Some("go:github.com/jackc/pgx/v5"),
     );
     // Must not match a shorter prefix that is not registered
     assert_eq!(
-        store.module_for_qualified_name("go:github.com/jackc/pgx.Row"),
+        store.package_for_qualified_name("go:github.com/jackc/pgx.Row"),
         None,
     );
 }
 
 #[test]
-fn store_module_for_qualified_name_nested_subpackage() {
+fn store_package_for_qualified_name_nested_subpackage() {
     let mut store = Store::new();
-    store.add_module("go:github.com/gorilla/mux");
+    store.add_package("go:github.com/gorilla/mux");
 
     assert_eq!(
-        store.module_for_qualified_name("go:github.com/gorilla/mux.Router"),
+        store.package_for_qualified_name("go:github.com/gorilla/mux.Router"),
         Some("go:github.com/gorilla/mux"),
     );
     assert_eq!(
-        store.module_for_qualified_name("go:github.com/gorilla/mux.Router.ServeHTTP"),
+        store.package_for_qualified_name("go:github.com/gorilla/mux.Router.ServeHTTP"),
         Some("go:github.com/gorilla/mux"),
     );
 }
@@ -967,7 +967,7 @@ fn resolver_root_vs_subpackage_typedef_lookup() {
 }
 
 /// Impl block on a third-party Go struct must not be rejected as foreign.
-/// Regression: methods.rs used `find('.')` to extract the module from a
+/// Regression: methods.rs used `find('.')` to extract the package from a
 /// qualified name, which broke on `go:github.com/gorilla/mux.Router`.
 #[test]
 fn third_party_go_struct_impl_methods_registered() {
@@ -1054,9 +1054,9 @@ fn main() {
     );
 }
 
-/// Third-party Go modules must not be saved into the stdlib definition
+/// Third-party Go packages must not be saved into the stdlib definition
 /// cache. Regression: analyze.rs filtered by `starts_with("go:")` which
-/// included third-party modules, causing stale cache entries to bypass
+/// included third-party packages, causing stale cache entries to bypass
 /// the resolver on subsequent runs.
 #[test]
 fn stdlib_cache_save_load_excludes_third_party() {

@@ -3,13 +3,13 @@ use crate::_harness::filesystem::MockFileSystem;
 use crate::_harness::formatting::{
     format_diagnostic_for_snapshot, format_project_diagnostic_for_snapshot,
 };
-use crate::_harness::infer::{infer, infer_module};
+use crate::_harness::infer::{infer, infer_package};
 use crate::{
     assert_infer_error_snapshot, assert_lex_error_snapshot,
-    assert_multimodule_infer_error_snapshot, assert_parse_error_snapshot,
+    assert_multipackage_infer_error_snapshot, assert_parse_error_snapshot,
 };
 
-use semantics::store::ENTRY_MODULE_ID;
+use semantics::store::ENTRY_PACKAGE_ID;
 
 #[test]
 fn infer_nil_not_supported() {
@@ -1081,7 +1081,7 @@ fn parse_chained_range() {
 fn parse_detached_doc_comment() {
     let input = r#"
 /// Provides utilities for working with strings.
-import "some_module"
+import "some_package"
 "#;
     assert_parse_error_snapshot!(input);
 }
@@ -1140,7 +1140,7 @@ fn main() {}
 #[test]
 fn parse_misplaced_file_comment_after_import() {
     let input = r#"
-import "some_module"
+import "some_package"
 
 //! Provides utilities for working with strings.
 
@@ -1429,8 +1429,8 @@ fn main() {
 "#;
     fs.add_file("main", "main.lis", source);
 
-    let result = infer_module("main", fs);
-    assert_multimodule_infer_error_snapshot!(result, source);
+    let result = infer_package("main", fs);
+    assert_multipackage_infer_error_snapshot!(result, source);
 }
 
 #[test]
@@ -1470,8 +1470,8 @@ fn main() {
 "#;
     fs.add_file("main", "main.lis", source);
 
-    let result = infer_module("main", fs);
-    assert_multimodule_infer_error_snapshot!(result, source);
+    let result = infer_package("main", fs);
+    assert_multipackage_infer_error_snapshot!(result, source);
 }
 
 #[test]
@@ -1496,12 +1496,12 @@ fn main() {
 "#;
     fs.add_file("main", "main.lis", source);
 
-    let result = infer_module("main", fs);
-    assert_multimodule_infer_error_snapshot!(result, source);
+    let result = infer_package("main", fs);
+    assert_multipackage_infer_error_snapshot!(result, source);
 }
 
 #[test]
-fn infer_cross_module_static_method_shortened_type_args_rejected() {
+fn infer_cross_package_static_method_shortened_type_args_rejected() {
     let mut fs = MockFileSystem::new();
 
     fs.add_file(
@@ -1523,12 +1523,12 @@ fn main() {
 "#;
     fs.add_file("main", "main.lis", source);
 
-    let result = infer_module("main", fs);
-    assert_multimodule_infer_error_snapshot!(result, source);
+    let result = infer_package("main", fs);
+    assert_multipackage_infer_error_snapshot!(result, source);
 }
 
 #[test]
-fn infer_struct_enum_variant_as_bare_value_cross_module() {
+fn infer_struct_enum_variant_as_bare_value_cross_package() {
     let mut fs = MockFileSystem::new();
 
     fs.add_file(
@@ -1551,8 +1551,8 @@ fn main() {
 "#;
     fs.add_file("main", "main.lis", source);
 
-    let result = infer_module("main", fs);
-    assert_multimodule_infer_error_snapshot!(result, source);
+    let result = infer_package("main", fs);
+    assert_multipackage_infer_error_snapshot!(result, source);
 }
 
 #[test]
@@ -1853,8 +1853,8 @@ fn test() {
 "#;
     fs.add_file("main", "main.lis", source);
 
-    let result = infer_module("main", fs);
-    assert_multimodule_infer_error_snapshot!(result, source);
+    let result = infer_package("main", fs);
+    assert_multipackage_infer_error_snapshot!(result, source);
 }
 
 #[test]
@@ -1881,8 +1881,8 @@ fn test() {
 "#;
     fs.add_file("main", "main.lis", source);
 
-    let result = infer_module("main", fs);
-    assert_multimodule_infer_error_snapshot!(result, source);
+    let result = infer_package("main", fs);
+    assert_multipackage_infer_error_snapshot!(result, source);
 }
 
 #[test]
@@ -1903,7 +1903,7 @@ fn f(p: Palette) -> int {
 }
 
 #[test]
-fn infer_enum_variant_typo_through_cross_module_alias_suggests_reachable_qualifier() {
+fn infer_enum_variant_typo_through_cross_package_alias_suggests_reachable_qualifier() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
         "events",
@@ -1931,8 +1931,8 @@ fn handle(e: api.UIEvent) -> int {
 "#;
     fs.add_file("main", "main.lis", source);
 
-    let result = infer_module("main", fs);
-    assert_multimodule_infer_error_snapshot!(result, source);
+    let result = infer_package("main", fs);
+    assert_multipackage_infer_error_snapshot!(result, source);
 }
 
 #[test]
@@ -4695,27 +4695,27 @@ fn cycle_diagnostic_snapshot(fs: MockFileSystem) -> String {
 }
 
 #[test]
-fn module_graph_import_cycle() {
+fn package_graph_import_cycle() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
-        "import \"module_a\"\n\nfn main() {}\n",
+        "import \"package_a\"\n\nfn main() {}\n",
     );
     fs.add_file(
-        "module_a",
-        "module_a.lis",
-        "import \"module_b\"\n\npub fn a() -> int { module_b.b() }\n",
+        "package_a",
+        "package_a.lis",
+        "import \"package_b\"\n\npub fn a() -> int { package_b.b() }\n",
     );
     fs.add_file(
-        "module_b",
-        "module_b.lis",
-        "import \"module_c\"\n\npub fn b() -> int { module_c.c() }\n",
+        "package_b",
+        "package_b.lis",
+        "import \"package_c\"\n\npub fn b() -> int { package_c.c() }\n",
     );
     fs.add_file(
-        "module_c",
-        "module_c.lis",
-        "import \"module_a\"\n\npub fn c() -> int { module_a.a() }\n",
+        "package_c",
+        "package_c.lis",
+        "import \"package_a\"\n\npub fn c() -> int { package_a.a() }\n",
     );
 
     let output = cycle_diagnostic_snapshot(fs);
@@ -4729,17 +4729,17 @@ fn module_graph_import_cycle() {
 }
 
 #[test]
-fn module_graph_import_self_loop() {
+fn package_graph_import_self_loop() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
-        ENTRY_MODULE_ID,
+        ENTRY_PACKAGE_ID,
         "main.lis",
-        "import \"module_a\"\n\nfn main() {}\n",
+        "import \"package_a\"\n\nfn main() {}\n",
     );
     fs.add_file(
-        "module_a",
-        "module_a.lis",
-        "import \"module_a\"\n\npub fn a() -> int { 1 }\n",
+        "package_a",
+        "package_a.lis",
+        "import \"package_a\"\n\npub fn a() -> int { 1 }\n",
     );
 
     let output = cycle_diagnostic_snapshot(fs);
@@ -5006,11 +5006,11 @@ var count: int
 fn infer_valueless_const_missing_annotation_in_typedef() {
     let mut fs = MockFileSystem::new();
     fs.add_file("types", "consts.d.lis", "const MAX_SIZE");
-    infer_module("types", fs).assert_infer_code("valueless_const_missing_annotation");
+    infer_package("types", fs).assert_infer_code("valueless_const_missing_annotation");
 }
 
-fn assert_go_hint_error_snapshot(name: &str, input: &str, module: &str, typedef: &str) {
-    let errors = crate::_harness::infer::checker_errors(input, &[(module, typedef)]);
+fn assert_go_hint_error_snapshot(name: &str, input: &str, package: &str, typedef: &str) {
+    let errors = crate::_harness::infer::checker_errors(input, &[(package, typedef)]);
     let error = errors
         .iter()
         .find(|e| e.code_str() == Some("attribute.unknown"))
@@ -5119,12 +5119,15 @@ pub fn Open() -> Handle
 }
 
 #[test]
-fn module_graph_module_not_found() {
+fn package_graph_package_not_found() {
     let mut fs = MockFileSystem::new();
     fs.add_file("main", "main.lis", r#"import "nonexistent""#);
-    let result = infer_module("main", fs);
+    let result = infer_package("main", fs);
 
-    assert!(!result.errors.is_empty(), "Expected module not found error");
+    assert!(
+        !result.errors.is_empty(),
+        "Expected package not found error"
+    );
 
     let output =
         format_diagnostic_for_snapshot(&result.errors[0], r#"import "nonexistent""#, "main.lis");
@@ -5138,13 +5141,16 @@ fn module_graph_module_not_found() {
 }
 
 #[test]
-fn module_graph_go_stdlib_hint() {
+fn package_graph_go_stdlib_hint() {
     let source = r#"import "time""#;
     let mut fs = MockFileSystem::new();
     fs.add_file("main", "main.lis", source);
-    let result = infer_module("main", fs);
+    let result = infer_package("main", fs);
 
-    assert!(!result.errors.is_empty(), "Expected module not found error");
+    assert!(
+        !result.errors.is_empty(),
+        "Expected package not found error"
+    );
 
     let output = format_diagnostic_for_snapshot(&result.errors[0], source, "main.lis");
 
@@ -5157,7 +5163,7 @@ fn module_graph_go_stdlib_hint() {
 }
 
 #[test]
-fn module_graph_src_prefix_hint() {
+fn package_graph_src_prefix_hint() {
     let source = r#"import "src/math""#;
     let mut fs = MockFileSystem::new();
     fs.add_file("main", "main.lis", source);
@@ -5166,9 +5172,12 @@ fn module_graph_src_prefix_hint() {
         "math.lis",
         "pub fn add(a: int, b: int) -> int { a + b }",
     );
-    let result = infer_module("main", fs);
+    let result = infer_package("main", fs);
 
-    assert!(!result.errors.is_empty(), "Expected module not found error");
+    assert!(
+        !result.errors.is_empty(),
+        "Expected package not found error"
+    );
 
     let output = format_diagnostic_for_snapshot(&result.errors[0], source, "main.lis");
 
@@ -5185,7 +5194,7 @@ fn infer_cannot_import_prelude() {
     let source = r#"import "prelude""#;
     let mut fs = MockFileSystem::new();
     fs.add_file("main", "main.lis", source);
-    let result = infer_module("main", fs);
+    let result = infer_package("main", fs);
 
     assert!(
         !result.errors.is_empty(),
@@ -5203,7 +5212,7 @@ fn infer_cannot_import_prelude() {
 }
 
 #[test]
-fn module_graph_nested_import_error_attribution() {
+fn package_graph_nested_import_error_attribution() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
         "_entry_",
@@ -5232,7 +5241,7 @@ pub fn outer_fn() -> string {
 }"#,
     );
 
-    let result = infer_module("_entry_", fs);
+    let result = infer_package("_entry_", fs);
 
     assert_eq!(
         result.errors.len(),
@@ -5251,7 +5260,7 @@ pub fn outer_fn() -> string {
 }
 
 #[test]
-fn module_graph_failed_import_suppresses_cascade() {
+fn package_graph_failed_import_suppresses_cascade() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
         "main",
@@ -5268,7 +5277,7 @@ fn main() {
   }
 }"#,
     );
-    let result = infer_module("main", fs);
+    let result = infer_package("main", fs);
 
     assert_eq!(
         result.errors.len(),
@@ -5279,8 +5288,8 @@ fn main() {
     assert!(
         result.errors[0]
             .code_str()
-            .is_some_and(|c| c.contains("module_not_found")),
-        "Expected module_not_found, got: {:?}",
+            .is_some_and(|c| c.contains("package_not_found")),
+        "Expected package_not_found, got: {:?}",
         result.errors[0].code_str()
     );
 }
@@ -5308,7 +5317,7 @@ fn main() {
         "pub fn sub(a: int, b: int) -> int { a - b }",
     );
 
-    let result = infer_module("_entry_", fs);
+    let result = infer_package("_entry_", fs);
 
     assert_eq!(result.errors.len(), 1);
     assert!(
@@ -5342,7 +5351,7 @@ fn main() {
         "pub fn sub(a: int, b: int) -> int { a - b }",
     );
 
-    let result = infer_module("_entry_", fs);
+    let result = infer_package("_entry_", fs);
 
     assert_eq!(result.errors.len(), 1);
     let msg = format!("{:?}", result.errors[0]);
@@ -5357,7 +5366,7 @@ fn main() {
 }
 
 #[test]
-fn unimported_module_test_file_checked() {
+fn unimported_package_test_file_checked() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
         "_entry_",
@@ -5372,11 +5381,11 @@ fn unimported_module_test_file_checked() {
         "#[test]\nfn bad() { let _: int = \"x\" }",
     );
 
-    let result = infer_module("_entry_", fs);
+    let result = infer_package("_entry_", fs);
 
     assert!(
         result.errors.iter().any(|d| d.is_error()),
-        "a type error in a test file of a module the entry never imports must still be reported"
+        "a type error in a test file of a package the entry never imports must still be reported"
     );
 }
 
@@ -5399,7 +5408,7 @@ fn main() {
     );
     fs.add_file("math", "core.test.lis", "fn bad() -> int { true }");
 
-    let result = infer_module("_entry_", fs);
+    let result = infer_package("_entry_", fs);
 
     assert!(
         result.errors.iter().any(|d| d.is_error()),
@@ -5408,7 +5417,7 @@ fn main() {
 }
 
 #[test]
-fn production_import_of_test_only_module_rejected() {
+fn production_import_of_test_only_package_rejected() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
         "_entry_",
@@ -5425,20 +5434,19 @@ fn main() {
         "pub fn sample() -> int { 1 }",
     );
 
-    let result = infer_module("_entry_", fs);
+    let result = infer_package("_entry_", fs);
 
     assert!(
-        result
-            .errors
-            .iter()
-            .any(|d| d.code_str().is_some_and(|c| c.contains("module_not_found"))),
-        "a production import of a module with only test files must not resolve, got: {:?}",
+        result.errors.iter().any(|d| d
+            .code_str()
+            .is_some_and(|c| c.contains("package_not_found"))),
+        "a production import of a package with only test files must not resolve, got: {:?}",
         result.errors
     );
 }
 
 #[test]
-fn unimported_production_import_of_test_only_module_rejected() {
+fn unimported_production_import_of_test_only_package_rejected() {
     let mut fs = MockFileSystem::new();
     fs.add_file("_entry_", "main.lis", "fn main() {\n}");
     fs.add_file("aaa", "aaa.test.lis", "pub fn sample() -> int { 1 }");
@@ -5455,14 +5463,13 @@ pub fn use_it() -> int { aaa.sample() }"#,
         "#[test]\nfn z() { assert use_it() == 1 }",
     );
 
-    let result = infer_module("_entry_", fs);
+    let result = infer_package("_entry_", fs);
 
     assert!(
-        result
-            .errors
-            .iter()
-            .any(|d| d.code_str().is_some_and(|c| c.contains("module_not_found"))),
-        "an orphan module's production import of a test-only module must be rejected regardless of seeding order, got: {:?}",
+        result.errors.iter().any(|d| d
+            .code_str()
+            .is_some_and(|c| c.contains("package_not_found"))),
+        "an orphan package's production import of a test-only package must be rejected regardless of seeding order, got: {:?}",
         result.errors
     );
 }
@@ -5490,7 +5497,7 @@ fn main() {
         "struct Fixture {\n  value: int,\n}",
     );
 
-    let result = infer_module("_entry_", fs);
+    let result = infer_package("_entry_", fs);
 
     assert!(
         result.errors.iter().any(|d| d.is_error()),
@@ -5522,7 +5529,7 @@ fn main() {
         "impl Counter {\n  fn doubled(self) -> int { self.value + self.value }\n}",
     );
 
-    let result = infer_module("_entry_", fs);
+    let result = infer_package("_entry_", fs);
 
     assert!(
         result.errors.iter().any(|d| d
@@ -5556,7 +5563,7 @@ fn main() {
         "struct Fixture {\n  value: int,\n}\n\nimpl Fixture {\n  fn doubled(self) -> int { self.value + self.value }\n}\n\nfn check() -> int {\n  let f = Fixture { value: 2 }\n  f.doubled()\n}",
     );
 
-    let result = infer_module("_entry_", fs);
+    let result = infer_package("_entry_", fs);
 
     assert!(
         !result.errors.iter().any(|d| d.is_error()),
@@ -5573,12 +5580,12 @@ fn has_code(result: &crate::_harness::infer::InferResult, code: &str) -> bool {
 }
 
 #[test]
-fn import_of_reserved_double_star_module_rejected() {
+fn import_of_reserved_double_star_package_rejected() {
     let mut fs = MockFileSystem::new();
     fs.add_file("main", "main.lis", "import \"**test_prelude\"");
-    let result = infer_module("main", fs);
+    let result = infer_package("main", fs);
     assert!(
-        has_code(&result, "reserved_module_import"),
+        has_code(&result, "reserved_package_import"),
         "a `**`-prefixed import must be rejected, got: {:?}",
         result.errors
     );
@@ -5588,7 +5595,7 @@ fn import_of_reserved_double_star_module_rejected() {
 fn test_context_in_production_file_gives_test_only_hint() {
     let mut fs = MockFileSystem::new();
     fs.add_file("main", "main.lis", "pub fn nope(t: TestContext) {}");
-    let result = infer_module("main", fs);
+    let result = infer_package("main", fs);
     let diagnostic = result
         .errors
         .iter()
@@ -5619,7 +5626,7 @@ fn test_attribute_on_struct_rejected() {
         "pub fn add(a: int, b: int) -> int { a + b }",
         "#[test]\nstruct Fixture {\n  value: int,\n}",
     );
-    let result = infer_module("_entry_", fs);
+    let result = infer_package("_entry_", fs);
     assert!(
         has_code(&result, "test_not_on_function"),
         "`#[test]` on a struct must be rejected, got: {:?}",
@@ -5633,7 +5640,7 @@ fn test_attribute_on_method_rejected() {
         "pub fn add(a: int, b: int) -> int { a + b }",
         "struct Fixture {\n  value: int,\n}\n\nimpl Fixture {\n  #[test]\n  fn check(self) {}\n}",
     );
-    let result = infer_module("_entry_", fs);
+    let result = infer_package("_entry_", fs);
     assert!(
         has_code(&result, "test_not_on_function"),
         "`#[test]` on a method must be rejected, got: {:?}",
@@ -5647,7 +5654,7 @@ fn test_attribute_in_production_file_rejected() {
         "pub fn add(a: int, b: int) -> int { a + b }\n\n#[test]\nfn checks() {}",
         "fn unused() {}",
     );
-    let result = infer_module("_entry_", fs);
+    let result = infer_package("_entry_", fs);
     assert!(
         has_code(&result, "test_outside_test_file"),
         "`#[test]` in a production file must be rejected, got: {:?}",
@@ -5661,7 +5668,7 @@ fn assert_non_bool_operand_rejected() {
         "pub fn add(a: int, b: int) -> int { a + b }",
         "#[test]\nfn checks() {\n  assert 42\n}",
     );
-    let result = infer_module("_entry_", fs);
+    let result = infer_package("_entry_", fs);
     assert!(
         has_code(&result, "type_mismatch"),
         "a non-bool `assert` operand must be rejected, got: {:?}",
@@ -5675,7 +5682,7 @@ fn test_attribute_with_flag_argument_rejected() {
         "pub fn add(a: int, b: int) -> int { a + b }",
         "#[test(snake_case)]\nfn checks() {}",
     );
-    let result = infer_module("_entry_", fs);
+    let result = infer_package("_entry_", fs);
     assert!(
         has_code(&result, "test_invalid_argument"),
         "`#[test]` with a flag argument must be rejected, got: {:?}",
@@ -5689,7 +5696,7 @@ fn test_attribute_with_two_arguments_rejected() {
         "pub fn add(a: int, b: int) -> int { a + b }",
         "#[test(\"one\", \"two\")]\nfn checks() {}",
     );
-    let result = infer_module("_entry_", fs);
+    let result = infer_package("_entry_", fs);
     assert!(
         has_code(&result, "test_invalid_argument"),
         "`#[test]` with two arguments must be rejected, got: {:?}",
@@ -5703,7 +5710,7 @@ fn test_attribute_with_parameter_rejected() {
         "pub fn add(a: int, b: int) -> int { a + b }",
         "#[test]\nfn checks(x: int) {}",
     );
-    let result = infer_module("_entry_", fs);
+    let result = infer_package("_entry_", fs);
     assert!(
         has_code(&result, "test_unsupported_signature"),
         "a parameterized test must be rejected, got: {:?}",
@@ -5717,7 +5724,7 @@ fn test_attribute_with_test_context_accepted() {
         "pub fn add(a: int, b: int) -> int { a + b }",
         "#[test]\nfn checks(t: TestContext) { t.parallel() }",
     );
-    let result = infer_module("_entry_", fs);
+    let result = infer_package("_entry_", fs);
     assert!(
         !has_code(&result, "test_unsupported_signature"),
         "a single TestContext parameter must be accepted, got: {:?}",
@@ -5736,7 +5743,7 @@ fn test_attribute_with_bare_handle_accepted() {
         "pub fn add(a: int, b: int) -> int { a + b }",
         "#[test]\nfn checks(t) { let _ = t.run(\"c\", |t| { assert true }) }",
     );
-    let result = infer_module("_entry_", fs);
+    let result = infer_package("_entry_", fs);
     assert!(
         !has_code(&result, "test_unsupported_signature"),
         "a bare handle parameter must be accepted, got: {:?}",
@@ -5755,7 +5762,7 @@ fn test_attribute_with_two_bare_params_rejected() {
         "pub fn add(a: int, b: int) -> int { a + b }",
         "#[test]\nfn checks(t, u) { assert true }",
     );
-    let result = infer_module("_entry_", fs);
+    let result = infer_package("_entry_", fs);
     assert!(
         has_code(&result, "test_unsupported_signature"),
         "more than one parameter must be rejected, got: {:?}",
@@ -5769,7 +5776,7 @@ fn test_attribute_on_impl_method_does_not_relax_params() {
         "pub struct Foo { n: int }\n\nimpl Foo {\n  #[test]\n  fn check(x) { let _ = x }\n}",
         "#[test]\nfn ok() { assert true }",
     );
-    let result = infer_module("_entry_", fs);
+    let result = infer_package("_entry_", fs);
     assert!(
         has_code(&result, "unexpected_token"),
         "an impl method stays strict-typed even with `#[test]`, so a bare parameter is a parse error, got: {:?}",
@@ -5783,7 +5790,7 @@ fn test_attribute_bare_handle_resolves_to_prelude_under_shadow() {
         "pub fn add(a: int, b: int) -> int { a + b }",
         "struct TestContext { x: int }\n\n#[test]\nfn checks(t) { let _ = t.run(\"c\", |t| { assert true }) }",
     );
-    let result = infer_module("_entry_", fs);
+    let result = infer_package("_entry_", fs);
     assert!(
         result.errors.is_empty(),
         "a bare handle is positional and resolves to the prelude even when TestContext is shadowed, so `t.run` must resolve cleanly, got: {:?}",
@@ -5797,7 +5804,7 @@ fn test_attribute_value_named_test_context_does_not_block_param() {
         "pub fn add(a: int, b: int) -> int { a + b }",
         "fn TestContext() {}\n\n#[test]\nfn checks(t: TestContext) { t.parallel() }",
     );
-    let result = infer_module("_entry_", fs);
+    let result = infer_package("_entry_", fs);
     assert!(
         !has_code(&result, "test_unsupported_signature"),
         "a value named TestContext does not occupy the type position, got: {:?}",
@@ -5811,7 +5818,7 @@ fn test_attribute_with_shadowed_test_context_rejected() {
         "pub fn add(a: int, b: int) -> int { a + b }",
         "struct TestContext { x: int }\n\n#[test]\nfn checks(t: TestContext) { let _ = t.x }",
     );
-    let result = infer_module("_entry_", fs);
+    let result = infer_package("_entry_", fs);
     assert!(
         has_code(&result, "test_unsupported_signature"),
         "a locally shadowed TestContext must not be accepted as the context param, got: {:?}",
@@ -5823,15 +5830,15 @@ fn test_attribute_with_shadowed_test_context_rejected() {
 fn infer_undeclared_test_handle_hints_at_parameter() {
     let test_src = "#[test]\nfn forgot_the_handle() {\n  t.skip(\"not ready\")\n}\n";
     let fs = test_attribute_fs("pub fn add(a: int, b: int) -> int { a + b }", test_src);
-    let result = infer_module("_entry_", fs);
-    assert_multimodule_infer_error_snapshot!(result, test_src);
+    let result = infer_package("_entry_", fs);
+    assert_multipackage_infer_error_snapshot!(result, test_src);
 }
 
 #[test]
 fn undeclared_t_outside_a_test_keeps_the_generic_hint() {
     let mut fs = MockFileSystem::new();
     fs.add_file("main", "main.lis", "fn uses() -> int {\n  t\n}");
-    let result = infer_module("main", fs);
+    let result = infer_package("main", fs);
     let diagnostic = result
         .errors
         .iter()
@@ -5850,7 +5857,7 @@ fn undeclared_handle_in_subtest_suppresses_tail_cascade() {
         "pub fn add(a: int, b: int) -> int { a + b }",
         "#[test]\nfn checks() {\n  t.run(\"sub\", |_| {\n    assert true\n  })\n}",
     );
-    let result = infer_module("_entry_", fs);
+    let result = infer_package("_entry_", fs);
     assert!(
         has_code(&result, "resolve.undeclared_test_handle"),
         "the undeclared handle must still be reported, got: {:?}",
@@ -5869,7 +5876,7 @@ fn test_attribute_with_return_rejected() {
         "pub fn add(a: int, b: int) -> int { a + b }",
         "#[test]\nfn checks() -> bool { false }",
     );
-    let result = infer_module("_entry_", fs);
+    let result = infer_package("_entry_", fs);
     assert!(
         has_code(&result, "test_unsupported_signature"),
         "a value-returning test must be rejected, got: {:?}",
@@ -5883,7 +5890,7 @@ fn test_attribute_with_result_unit_error_return_accepted() {
         "pub fn add(a: int, b: int) -> int { a + b }",
         "import \"go:errors\"\n\n#[test]\nfn checks() -> Result<(), error> { Err(errors.New(\"x\")) }",
     );
-    let result = infer_module("_entry_", fs);
+    let result = infer_package("_entry_", fs);
     assert!(
         !has_code(&result, "test_unsupported_signature"),
         "a `Result<(), error>` test must be accepted, got: {:?}",
@@ -5897,7 +5904,7 @@ fn test_attribute_with_non_error_result_return_rejected() {
         "pub fn add(a: int, b: int) -> int { a + b }",
         "struct MyErr {}\n\n#[test]\nfn checks() -> Result<(), MyErr> { Err(MyErr {}) }",
     );
-    let result = infer_module("_entry_", fs);
+    let result = infer_package("_entry_", fs);
     assert!(
         has_code(&result, "test_unsupported_signature"),
         "a non-`error` Result test is deferred and must be rejected, got: {:?}",
@@ -5911,7 +5918,7 @@ fn local_error_type_shadow_rejected() {
         "pub fn add(a: int, b: int) -> int { a + b }",
         "interface error { fn code() -> int }\n\n#[test]\nfn checks() -> Result<(), error> { Ok(()) }",
     );
-    let result = infer_module("_entry_", fs);
+    let result = infer_package("_entry_", fs);
     assert!(
         has_code(&result, "prelude_type_shadowed"),
         "shadowing the prelude `error` type must be rejected, got: {:?}",
@@ -5925,7 +5932,7 @@ fn assert_without_test_context_rejected() {
         "pub fn add(a: int, b: int) -> int { a + b }",
         "fn helper() {\n  assert true\n}",
     );
-    let result = infer_module("_entry_", fs);
+    let result = infer_package("_entry_", fs);
     assert!(
         has_code(&result, "assert_without_test_context"),
         "`assert` with no test handle in scope must be rejected, got: {:?}",
@@ -5939,7 +5946,7 @@ fn calling_a_test_function_rejected() {
         "pub fn add(a: int, b: int) -> int { a + b }",
         "#[test]\nfn alpha() {}\n\n#[test]\nfn beta() {\n  alpha()\n}",
     );
-    let result = infer_module("_entry_", fs);
+    let result = infer_package("_entry_", fs);
     assert!(
         has_code(&result, "test_function_not_callable"),
         "calling a `#[test]` function must be rejected, got: {:?}",
@@ -5953,7 +5960,7 @@ fn calling_a_test_file_helper_accepted() {
         "pub fn add(a: int, b: int) -> int { a + b }",
         "fn helper() {}\n\n#[test]\nfn alpha() {\n  helper()\n}",
     );
-    let result = infer_module("_entry_", fs);
+    let result = infer_package("_entry_", fs);
     assert!(
         !has_code(&result, "test_function_not_callable"),
         "calling a non-test helper must be accepted, got: {:?}",
@@ -5967,7 +5974,7 @@ fn assert_in_wildcard_handle_helper_rejected() {
         "pub fn add(a: int, b: int) -> int { a + b }",
         "fn helper(_: TestContext) {\n  assert true\n}",
     );
-    let result = infer_module("_entry_", fs);
+    let result = infer_package("_entry_", fs);
     assert!(
         has_code(&result, "assert_without_test_context"),
         "a discarded `_: TestContext` is not a usable handle, got: {:?}",
@@ -5981,7 +5988,7 @@ fn local_test_context_type_is_not_the_handle() {
         "pub fn add(a: int, b: int) -> int { a + b }",
         "struct TestContext {}\n\nfn helper(t: TestContext) {\n  assert true\n}",
     );
-    let result = infer_module("_entry_", fs);
+    let result = infer_package("_entry_", fs);
     assert!(
         has_code(&result, "assert_without_test_context"),
         "a local `TestContext` type must not be treated as the test handle, got: {:?}",
@@ -5995,7 +6002,7 @@ fn assert_in_test_context_helper_accepted() {
         "pub fn add(a: int, b: int) -> int { a + b }",
         "fn helper(t: TestContext) {\n  assert true\n}\n\n#[test]\nfn checks(t: TestContext) {\n  helper(t)\n}",
     );
-    let result = infer_module("_entry_", fs);
+    let result = infer_package("_entry_", fs);
     assert!(
         !has_code(&result, "assert_without_test_context"),
         "`assert` in a helper taking `t: TestContext` must be accepted, got: {:?}",
@@ -6009,7 +6016,7 @@ fn let_assert_refutable_pattern_accepted() {
         "pub fn parse(n: int) -> Result<int, int> { Ok(n) }",
         "#[test]\nfn checks() {\n  let assert Ok(h) = parse(1)\n  assert h == 1\n}",
     );
-    let result = infer_module("_entry_", fs);
+    let result = infer_package("_entry_", fs);
     assert!(
         !has_code(&result, "literal_in_binding") && !has_code(&result, "or_pattern_in_irrefutable"),
         "`let assert` must permit a refutable pattern, got: {:?}",
@@ -6023,7 +6030,7 @@ fn let_assert_outside_test_rejected() {
         "pub fn parse(n: int) -> Result<int, int> { Ok(n) }",
         "fn helper() {\n  let assert Ok(h) = parse(1)\n  let _ = h\n}",
     );
-    let result = infer_module("_entry_", fs);
+    let result = infer_package("_entry_", fs);
     assert!(
         has_code(&result, "assert_without_test_context"),
         "`let assert` with no test handle in scope must be rejected, got: {:?}",
@@ -6037,7 +6044,7 @@ fn let_assert_mut_rejected() {
         "pub fn add(a: int, b: int) -> int { a + b }",
         "#[test]\nfn checks() {\n  let assert mut x = 5\n  let _ = x\n}",
     );
-    let result = infer_module("_entry_", fs);
+    let result = infer_package("_entry_", fs);
     assert!(
         has_code(&result, "syntax_error"),
         "`let assert mut` must be rejected, got: {:?}",
@@ -6051,7 +6058,7 @@ fn test_attribute_with_generics_rejected() {
         "pub fn add(a: int, b: int) -> int { a + b }",
         "#[test]\nfn checks<T>() {}",
     );
-    let result = infer_module("_entry_", fs);
+    let result = infer_package("_entry_", fs);
     assert!(
         has_code(&result, "test_unsupported_signature"),
         "a generic test must be rejected, got: {:?}",
@@ -6078,11 +6085,11 @@ fn main() {
     );
     fs.add_file("math", "core.test.lis", "fn checks() -> int { secret() }");
 
-    let result = infer_module("_entry_", fs);
+    let result = infer_package("_entry_", fs);
 
     assert!(
         !result.errors.iter().any(|d| d.is_error()),
-        "an internal `.test.lis` file must reach private symbols in its module, got: {:?}",
+        "an internal `.test.lis` file must reach private symbols in its package, got: {:?}",
         result.errors
     );
 }
@@ -6106,7 +6113,7 @@ fn main() {
     );
     fs.add_file("math", "core.test.lis", "fn helper() -> int { 0 }");
 
-    let result = infer_module("_entry_", fs);
+    let result = infer_package("_entry_", fs);
 
     assert!(
         result.errors.iter().any(|d| d.is_error()),
@@ -6138,11 +6145,11 @@ fn main() {
         "fn checks() -> int { helper() }",
     );
 
-    let result = infer_module("_entry_", fs);
+    let result = infer_package("_entry_", fs);
 
     assert!(
         !result.errors.iter().any(|d| d.is_error()),
-        "a test file must resolve definitions from other test files in its module, got: {:?}",
+        "a test file must resolve definitions from other test files in its package, got: {:?}",
         result.errors
     );
 }
@@ -6170,7 +6177,7 @@ fn main() {
         "struct Fixture {\n  value: int,\n}\n\nfn make() -> int {\n  let f = Fixture { value: 1 }\n  f.value\n}",
     );
 
-    let result = infer_module("_entry_", fs);
+    let result = infer_package("_entry_", fs);
 
     assert!(
         !result.errors.iter().any(|d| d.is_error()),
@@ -6198,11 +6205,11 @@ fn main() {
     );
     fs.add_file("math", "core.test.lis", "pub fn helper() -> int { 1 }");
 
-    let result = infer_module("_entry_", fs);
+    let result = infer_package("_entry_", fs);
 
     assert!(
         result.errors.iter().any(|d| d.is_error()),
-        "a `pub` definition in a test file must not be importable from another module"
+        "a `pub` definition in a test file must not be importable from another package"
     );
 }
 
@@ -6606,8 +6613,8 @@ fn main() -> int {
 "#;
     fs.add_file("main", "main.lis", source);
 
-    let result = infer_module("main", fs);
-    assert_multimodule_infer_error_snapshot!(result, source);
+    let result = infer_package("main", fs);
+    assert_multipackage_infer_error_snapshot!(result, source);
 }
 
 #[test]
@@ -6634,8 +6641,8 @@ fn main() {
 "#;
     fs.add_file("main", "main.lis", source);
 
-    let result = infer_module("main", fs);
-    assert_multimodule_infer_error_snapshot!(result, source);
+    let result = infer_package("main", fs);
+    assert_multipackage_infer_error_snapshot!(result, source);
 }
 
 #[test]
@@ -6662,8 +6669,8 @@ fn main() {
 "#;
     fs.add_file("main", "main.lis", source);
 
-    let result = infer_module("main", fs);
-    assert_multimodule_infer_error_snapshot!(result, source);
+    let result = infer_package("main", fs);
+    assert_multipackage_infer_error_snapshot!(result, source);
 }
 
 #[test]
@@ -6697,8 +6704,8 @@ fn main() -> int {
 "#;
     fs.add_file("main", "main.lis", source);
 
-    let result = infer_module("main", fs);
-    assert_multimodule_infer_error_snapshot!(result, source);
+    let result = infer_package("main", fs);
+    assert_multipackage_infer_error_snapshot!(result, source);
 }
 
 #[test]
@@ -6730,8 +6737,8 @@ fn main() {
 "#;
     fs.add_file("main", "main.lis", source);
 
-    let result = infer_module("main", fs);
-    assert_multimodule_infer_error_snapshot!(result, source);
+    let result = infer_package("main", fs);
+    assert_multipackage_infer_error_snapshot!(result, source);
 }
 
 #[test]
@@ -6758,8 +6765,8 @@ fn main() {
 "#;
     fs.add_file("main", "main.lis", source);
 
-    let result = infer_module("main", fs);
-    assert_multimodule_infer_error_snapshot!(result, source);
+    let result = infer_package("main", fs);
+    assert_multipackage_infer_error_snapshot!(result, source);
 }
 
 #[test]
@@ -6791,8 +6798,8 @@ fn main() {
 "#;
     fs.add_file("main", "main.lis", source);
 
-    let result = infer_module("main", fs);
-    assert_multimodule_infer_error_snapshot!(result, source);
+    let result = infer_package("main", fs);
+    assert_multipackage_infer_error_snapshot!(result, source);
 }
 
 #[test]
@@ -6963,7 +6970,7 @@ fn f() {
 fn parse_task_dot_access_without_call() {
     let input = r#"
 fn f() {
-  task module.work
+  task package.work
 }
 "#;
     assert_parse_error_snapshot!(input);
@@ -7019,7 +7026,7 @@ fn f() {
 fn parse_defer_dot_access_without_call() {
     let input = r#"
 fn f() {
-  defer module.cleanup
+  defer package.cleanup
 }
 "#;
     assert_parse_error_snapshot!(input);
@@ -7368,8 +7375,8 @@ fn main() -> int {
 "#;
     fs.add_file("main", "main.lis", source);
 
-    let result = infer_module("main", fs);
-    assert_multimodule_infer_error_snapshot!(result, source);
+    let result = infer_package("main", fs);
+    assert_multipackage_infer_error_snapshot!(result, source);
 }
 
 #[test]
@@ -7401,8 +7408,8 @@ fn main() {
 "#;
     fs.add_file("main", "main.lis", source);
 
-    let result = infer_module("main", fs);
-    assert_multimodule_infer_error_snapshot!(result, source);
+    let result = infer_package("main", fs);
+    assert_multipackage_infer_error_snapshot!(result, source);
 }
 
 #[test]
@@ -7426,8 +7433,8 @@ fn main() {
 "#;
     fs.add_file("main", "main.lis", source);
 
-    let result = infer_module("main", fs);
-    assert_multimodule_infer_error_snapshot!(result, source);
+    let result = infer_package("main", fs);
+    assert_multipackage_infer_error_snapshot!(result, source);
 }
 
 #[test]
@@ -7451,8 +7458,8 @@ fn main() {
 "#;
     fs.add_file("main", "main.lis", source);
 
-    let result = infer_module("main", fs);
-    assert_multimodule_infer_error_snapshot!(result, source);
+    let result = infer_package("main", fs);
+    assert_multipackage_infer_error_snapshot!(result, source);
 }
 
 #[test]
@@ -7911,8 +7918,8 @@ fn test(day: weekday.Weekday) {
     let mut fs = MockFileSystem::new();
     fs.add_file("weekday", "weekday.d.lis", typedef_source);
     fs.add_file("main", "main.lis", main_source);
-    let result = infer_module("main", fs);
-    assert_multimodule_infer_error_snapshot!(result, main_source);
+    let result = infer_package("main", fs);
+    assert_multipackage_infer_error_snapshot!(result, main_source);
 }
 
 #[test]
@@ -7931,8 +7938,8 @@ fn name(day: lib.Weekday) -> string {
     let mut fs = MockFileSystem::new();
     fs.add_file("lib", "lib.d.lis", typedef_source);
     fs.add_file("main", "main.lis", main_source);
-    let result = infer_module("main", fs);
-    assert_multimodule_infer_error_snapshot!(result, main_source);
+    let result = infer_package("main", fs);
+    assert_multipackage_infer_error_snapshot!(result, main_source);
 }
 
 #[test]
@@ -7952,7 +7959,7 @@ fn test() {
     let mut fs = MockFileSystem::new();
     fs.add_file("time", "time.d.lis", typedef_source);
     fs.add_file("main", "main.lis", main_source);
-    let result = infer_module("main", fs);
+    let result = infer_package("main", fs);
 
     assert!(!result.errors.is_empty(), "Expected type error");
 
@@ -7983,7 +7990,7 @@ fn test() {
     let mut fs = MockFileSystem::new();
     fs.add_file("time", "time.d.lis", typedef_source);
     fs.add_file("main", "main.lis", main_source);
-    let result = infer_module("main", fs);
+    let result = infer_package("main", fs);
 
     assert!(!result.errors.is_empty(), "Expected type error");
 
@@ -8013,7 +8020,7 @@ fn test() {
     let mut fs = MockFileSystem::new();
     fs.add_file("time", "time.d.lis", typedef_source);
     fs.add_file("main", "main.lis", main_source);
-    let result = infer_module("main", fs);
+    let result = infer_package("main", fs);
 
     assert!(!result.errors.is_empty(), "Expected type error");
 
@@ -8045,7 +8052,7 @@ fn test() {
     let mut fs = MockFileSystem::new();
     fs.add_file("time", "time.d.lis", typedef_source);
     fs.add_file("main", "main.lis", main_source);
-    let result = infer_module("main", fs);
+    let result = infer_package("main", fs);
 
     assert!(!result.errors.is_empty(), "Expected type error");
 
@@ -8078,9 +8085,9 @@ fn test() {
     let mut fs = MockFileSystem::new();
     fs.add_file("time", "time.d.lis", typedef_source);
     fs.add_file("main", "main.lis", main_source);
-    let result = infer_module("main", fs);
+    let result = infer_package("main", fs);
 
-    assert_multimodule_infer_error_snapshot!(result, main_source);
+    assert_multipackage_infer_error_snapshot!(result, main_source);
 }
 
 #[test]
@@ -10001,8 +10008,8 @@ fn main() {}
 "#;
     fs.add_file("main", "main.lis", source);
 
-    let result = infer_module("main", fs);
-    assert_multimodule_infer_error_snapshot!(result, source);
+    let result = infer_package("main", fs);
+    assert_multipackage_infer_error_snapshot!(result, source);
 }
 
 // A user impl on the built-in `Array` (literal size) must be rejected like a
@@ -10022,8 +10029,8 @@ fn main() {}
 "#;
     fs.add_file("main", "main.lis", source);
 
-    let result = infer_module("main", fs);
-    assert_multimodule_infer_error_snapshot!(result, source);
+    let result = infer_package("main", fs);
+    assert_multipackage_infer_error_snapshot!(result, source);
 }
 
 #[test]
@@ -10041,8 +10048,8 @@ fn main() {}
 "#;
     fs.add_file("main", "main.lis", source);
 
-    let result = infer_module("main", fs);
-    assert_multimodule_infer_error_snapshot!(result, source);
+    let result = infer_package("main", fs);
+    assert_multipackage_infer_error_snapshot!(result, source);
 }
 
 #[test]
@@ -10072,8 +10079,8 @@ fn main() {}
 "#;
     fs.add_file("main", "main.lis", source);
 
-    let result = infer_module("main", fs);
-    assert_multimodule_infer_error_snapshot!(result, source);
+    let result = infer_package("main", fs);
+    assert_multipackage_infer_error_snapshot!(result, source);
 }
 
 #[test]
@@ -10857,7 +10864,7 @@ fn main() {
 }
 "#;
     fs.add_file("main", "main.lis", source);
-    let result = infer_module("main", fs);
+    let result = infer_package("main", fs);
 
     assert!(
         result
@@ -11343,7 +11350,7 @@ fn main() -> Result<(), string> {
   Ok(())
 }
 "#;
-    fs.add_file(ENTRY_MODULE_ID, "main.lis", source);
+    fs.add_file(ENTRY_PACKAGE_ID, "main.lis", source);
     let result = compile_check(fs);
     assert!(
         !result.errors().is_empty(),
@@ -11367,7 +11374,7 @@ fn main(x: int) {
   let _ = x
 }
 "#;
-    fs.add_file(ENTRY_MODULE_ID, "main.lis", source);
+    fs.add_file(ENTRY_PACKAGE_ID, "main.lis", source);
     let result = compile_check(fs);
     assert!(
         !result.errors().is_empty(),
@@ -11391,7 +11398,7 @@ fn main() -> int {
   42
 }
 "#;
-    fs.add_file(ENTRY_MODULE_ID, "main.lis", source);
+    fs.add_file(ENTRY_PACKAGE_ID, "main.lis", source);
     let result = compile_check(fs);
     assert!(
         !result.errors().is_empty(),
@@ -11419,7 +11426,7 @@ fn main() {
   let _ = fmt.Println("hi")
 }
 "#;
-    fs.add_file(ENTRY_MODULE_ID, "main.lis", source);
+    fs.add_file(ENTRY_PACKAGE_ID, "main.lis", source);
     let result = compile_check(fs);
     assert!(!result.errors().is_empty(), "Expected error");
     assert!(
@@ -11445,7 +11452,7 @@ fn main() {
   let _ = lib.hello()
 }
 "#;
-    fs.add_file(ENTRY_MODULE_ID, "main.lis", source);
+    fs.add_file(ENTRY_PACKAGE_ID, "main.lis", source);
     let result = compile_check(fs);
     assert!(!result.errors().is_empty(), "Expected error");
     assert!(
@@ -11471,7 +11478,7 @@ fn main() {
   let _ = util.hello()
 }
 "#;
-    fs.add_file(ENTRY_MODULE_ID, "main.lis", source);
+    fs.add_file(ENTRY_PACKAGE_ID, "main.lis", source);
     let result = compile_check(fs);
     assert!(!result.errors().is_empty(), "Expected error");
     assert!(
@@ -11500,7 +11507,7 @@ fn main() {
   foo.bar(5)
 }
 "#;
-    fs.add_file(ENTRY_MODULE_ID, "main.lis", source);
+    fs.add_file(ENTRY_PACKAGE_ID, "main.lis", source);
     let result = compile_check(fs);
     assert!(
         result
@@ -11525,7 +11532,7 @@ fn main() {
   let _ = take(lib.hello())
 }
 "#;
-    fs.add_file(ENTRY_MODULE_ID, "main.lis", source);
+    fs.add_file(ENTRY_PACKAGE_ID, "main.lis", source);
     let result = compile_check(fs);
     assert!(
         result
@@ -11549,7 +11556,7 @@ fn main() {
   let _ = LIB
 }
 "#;
-    fs.add_file(ENTRY_MODULE_ID, "main.lis", source);
+    fs.add_file(ENTRY_PACKAGE_ID, "main.lis", source);
     let result = compile_check(fs);
     assert!(
         result
@@ -11721,7 +11728,7 @@ fn main() {
 }
 
 #[test]
-fn infer_cross_module_struct_alias_stays_struct_diagnostic() {
+fn infer_cross_package_struct_alias_stays_struct_diagnostic() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
         "geo",
@@ -11740,7 +11747,7 @@ fn main() {
 }
 "#;
     fs.add_file("main", "main.lis", source);
-    let result = infer_module("main", fs);
+    let result = infer_package("main", fs);
     assert!(
         has_code(&result, "record_struct_value"),
         "an imported struct alias must get the struct-literal diagnostic, got: {:?}",
@@ -11754,7 +11761,7 @@ fn main() {
 }
 
 #[test]
-fn infer_cross_module_tuple_struct_alias_stays_constructor_diagnostic() {
+fn infer_cross_package_tuple_struct_alias_stays_constructor_diagnostic() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
         "geo",
@@ -11773,7 +11780,7 @@ fn main() {
 }
 "#;
     fs.add_file("main", "main.lis", source);
-    let result = infer_module("main", fs);
+    let result = infer_package("main", fs);
     assert!(
         has_code(&result, "native_constructor_value"),
         "an imported tuple-struct alias must get the constructor diagnostic, got: {:?}",
@@ -11888,7 +11895,7 @@ fn main() {
 }
 
 #[test]
-fn infer_cross_module_instance_method_value_allowed() {
+fn infer_cross_package_instance_method_value_allowed() {
     let mut fs = MockFileSystem::new();
 
     fs.add_file(
@@ -11914,16 +11921,16 @@ fn main() {
 "#;
     fs.add_file("main", "main.lis", source);
 
-    let result = infer_module("main", fs);
+    let result = infer_package("main", fs);
     assert!(
         !has_code(&result, "type_used_as_value"),
-        "taking a cross-module instance method as a value must stay legal, got: {:?}",
+        "taking a cross-package instance method as a value must stay legal, got: {:?}",
         result.errors
     );
 }
 
 #[test]
-fn infer_instance_method_called_on_cross_module_type() {
+fn infer_instance_method_called_on_cross_package_type() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
         "geo",
@@ -11942,16 +11949,16 @@ fn main() {
 }
 "#;
     fs.add_file("main", "main.lis", source);
-    let result = infer_module("main", fs);
+    let result = infer_package("main", fs);
     assert!(
         has_code(&result, "type_used_as_value"),
-        "an instance method called on a cross-module type name must be rejected, got: {:?}",
+        "an instance method called on a cross-package type name must be rejected, got: {:?}",
         result.errors
     );
 }
 
 #[test]
-fn infer_cross_module_struct_literal_via_alias_allowed() {
+fn infer_cross_package_struct_literal_via_alias_allowed() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
         "shapes",
@@ -11970,16 +11977,16 @@ fn main() {
 }
 "#;
     fs.add_file("main", "main.lis", source);
-    let result = infer_module("main", fs);
+    let result = infer_package("main", fs);
     assert!(
         result.errors.is_empty(),
-        "constructing a struct through a cross-module alias must stay legal, got: {:?}",
+        "constructing a struct through a cross-package alias must stay legal, got: {:?}",
         result.errors
     );
 }
 
 #[test]
-fn infer_cross_module_variant_via_alias_allowed() {
+fn infer_cross_package_variant_via_alias_allowed() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
         "palette",
@@ -11998,10 +12005,10 @@ fn main() {
 }
 "#;
     fs.add_file("main", "main.lis", source);
-    let result = infer_module("main", fs);
+    let result = infer_package("main", fs);
     assert!(
         !has_code(&result, "type_used_as_value"),
-        "constructing an enum variant through a cross-module alias must stay legal, got: {:?}",
+        "constructing an enum variant through a cross-package alias must stay legal, got: {:?}",
         result.errors
     );
 }
@@ -12043,7 +12050,7 @@ fn main() {
 }
 
 #[test]
-fn infer_cross_module_collection_alias_as_value() {
+fn infer_cross_package_collection_alias_as_value() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
         "grid",
@@ -12061,16 +12068,16 @@ fn main() {
 }
 "#;
     fs.add_file("main", "main.lis", source);
-    let result = infer_module("main", fs);
+    let result = infer_package("main", fs);
     assert!(
         has_code(&result, "type_used_as_value"),
-        "a cross-module collection alias in value position must be rejected, got: {:?}",
+        "a cross-package collection alias in value position must be rejected, got: {:?}",
         result.errors
     );
 }
 
 #[test]
-fn infer_cross_module_interface_as_value() {
+fn infer_cross_package_interface_as_value() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
         "svc",
@@ -12088,16 +12095,16 @@ fn main() {
 }
 "#;
     fs.add_file("main", "main.lis", source);
-    let result = infer_module("main", fs);
+    let result = infer_package("main", fs);
     assert!(
         has_code(&result, "type_used_as_value"),
-        "a cross-module interface in value position must be rejected, got: {:?}",
+        "a cross-package interface in value position must be rejected, got: {:?}",
         result.errors
     );
 }
 
 #[test]
-fn infer_cross_module_const_value_allowed() {
+fn infer_cross_package_const_value_allowed() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
         "conf",
@@ -12115,7 +12122,7 @@ fn main() {
 }
 "#;
     fs.add_file("main", "main.lis", source);
-    let result = infer_module("main", fs);
+    let result = infer_package("main", fs);
     assert!(
         !has_code(&result, "type_used_as_value"),
         "an imported const value must not be rejected as a type, got: {:?}",
@@ -12174,7 +12181,7 @@ fn iterate_in_typedef_rejected() {
         "colors.d.lis",
         "#[iterate]\npub enum Color { Red, Green }",
     );
-    let result = infer_module("colors", fs);
+    let result = infer_package("colors", fs);
     assert!(
         has_code(&result, "iterate_in_typedef"),
         "an iterate attribute in a typedef must be rejected, got: {:?}",
@@ -12278,7 +12285,7 @@ fn display_in_typedef_rejected() {
         "shapes.d.lis",
         "#[display]\npub struct Point { pub x: int, pub y: int }",
     );
-    let result = infer_module("shapes", fs);
+    let result = infer_package("shapes", fs);
     assert!(
         has_code(&result, "display_in_typedef"),
         "a display attribute in a typedef must be rejected, got: {:?}",
@@ -12602,7 +12609,7 @@ fn equality_in_typedef_rejected() {
         "shapes.d.lis",
         "#[equality]\npub struct Point { pub x: int, pub y: int }",
     );
-    let result = infer_module("shapes", fs);
+    let result = infer_package("shapes", fs);
     assert!(
         result
             .errors
@@ -12618,7 +12625,7 @@ fn equality_in_typedef_rejected() {
 }
 
 #[test]
-fn equality_rejects_cross_module_private_equals() {
+fn equality_rejects_cross_package_private_equals() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
         "models",
@@ -12642,8 +12649,8 @@ struct Holder { item: models.Item }
 "#;
     fs.add_file("main", "main.lis", source);
 
-    let result = infer_module("main", fs);
-    assert_multimodule_infer_error_snapshot!(result, source);
+    let result = infer_package("main", fs);
+    assert_multipackage_infer_error_snapshot!(result, source);
 }
 
 #[test]
@@ -12714,7 +12721,7 @@ struct Wrap {
 }
 "#,
     );
-    let result = infer_module("shapes", fs);
+    let result = infer_package("shapes", fs);
     assert!(
         result.errors.is_empty(),
         "unexpected errors: {:?}",
@@ -12750,7 +12757,7 @@ fn cmp(a: Slice<Box<int>>, b: Slice<Box<int>>) -> bool {
 }
 "#,
     );
-    let result = infer_module("shapes", fs);
+    let result = infer_package("shapes", fs);
     assert!(
         result.errors.is_empty(),
         "unexpected errors: {:?}",
@@ -12786,7 +12793,7 @@ fn cmp(a: Slice<Box<int>>, b: Slice<Box<int>>) -> bool {
 }
 "#,
     );
-    let result = infer_module("shapes", fs);
+    let result = infer_package("shapes", fs);
     assert!(
         result.errors.is_empty(),
         "`fn equals(self) -> bool` is not custom equality, so a comparable `Box<int>` slice must fall back to `==`, not be rejected: {:?}",
@@ -12827,7 +12834,7 @@ enum E {
 }
 "#,
     );
-    let result = infer_module("shapes", fs);
+    let result = infer_package("shapes", fs);
     assert!(
         result.errors.is_empty(),
         "unexpected errors: {:?}",
@@ -12863,7 +12870,7 @@ fn cmp(a: Map<int, Box<int>>, b: Map<int, Box<int>>) -> bool {
 }
 "#,
     );
-    let result = infer_module("shapes", fs);
+    let result = infer_package("shapes", fs);
     assert!(
         result.errors.is_empty(),
         "unexpected errors: {:?}",
@@ -12899,7 +12906,7 @@ fn cmp(a: Map<Box<int>, int>, b: Map<Box<int>, int>) -> bool {
 }
 "#,
     );
-    let result = infer_module("shapes", fs);
+    let result = infer_package("shapes", fs);
     assert!(
         result.errors.is_empty(),
         "a map key is compared with `==`, so a comparable `Box<int>` key must be allowed even though its `equals` is UFCS-lowered, got: {:?}",
@@ -12925,7 +12932,7 @@ impl Inner {
 }
 
 #[test]
-fn equality_rejects_public_type_private_equals_cross_module() {
+fn equality_rejects_public_type_private_equals_cross_package() {
     let mut fs = MockFileSystem::new();
     fs.add_file(
         "models",
@@ -12950,8 +12957,8 @@ struct Holder { item: models.Item }
 "#;
     fs.add_file("main", "main.lis", source);
 
-    let result = infer_module("main", fs);
-    assert_multimodule_infer_error_snapshot!(result, source);
+    let result = infer_package("main", fs);
+    assert_multipackage_infer_error_snapshot!(result, source);
 }
 
 #[test]
@@ -13302,7 +13309,7 @@ fn main() {
 }
 
 #[test]
-fn infer_cross_module_record_struct_as_value() {
+fn infer_cross_package_record_struct_as_value() {
     let mut fs = MockFileSystem::new();
 
     fs.add_file(
@@ -13323,8 +13330,8 @@ fn main() {
 "#;
     fs.add_file("main", "main.lis", source);
 
-    let result = infer_module("main", fs);
-    assert_multimodule_infer_error_snapshot!(result, source);
+    let result = infer_package("main", fs);
+    assert_multipackage_infer_error_snapshot!(result, source);
 }
 
 #[test]
@@ -13340,7 +13347,7 @@ fn main() {
 }
 
 #[test]
-fn infer_type_alias_as_qualifier_cross_module() {
+fn infer_type_alias_as_qualifier_cross_package() {
     let mut fs = MockFileSystem::new();
 
     fs.add_file(
@@ -13367,8 +13374,8 @@ fn main() {
 "#;
     fs.add_file("main", "main.lis", source);
 
-    let result = infer_module("main", fs);
-    assert_multimodule_infer_error_snapshot!(result, source);
+    let result = infer_package("main", fs);
+    assert_multipackage_infer_error_snapshot!(result, source);
 }
 
 #[test]
@@ -13401,7 +13408,7 @@ fn main() {
 }
 
 #[test]
-fn infer_parenthesized_module_qualifier() {
+fn infer_parenthesized_package_qualifier() {
     let mut fs = MockFileSystem::new();
 
     fs.add_file(
@@ -13422,12 +13429,12 @@ fn main() {
 "#;
     fs.add_file("main", "main.lis", source);
 
-    let result = infer_module("main", fs);
-    assert_multimodule_infer_error_snapshot!(result, source);
+    let result = infer_package("main", fs);
+    assert_multipackage_infer_error_snapshot!(result, source);
 }
 
 #[test]
-fn infer_parenthesized_cross_module_type_qualifier() {
+fn infer_parenthesized_cross_package_type_qualifier() {
     let mut fs = MockFileSystem::new();
 
     fs.add_file(
@@ -13452,8 +13459,8 @@ fn main() {
 "#;
     fs.add_file("main", "main.lis", source);
 
-    let result = infer_module("main", fs);
-    assert_multimodule_infer_error_snapshot!(result, source);
+    let result = infer_package("main", fs);
+    assert_multipackage_infer_error_snapshot!(result, source);
 }
 
 #[test]
@@ -13474,7 +13481,7 @@ fn main() {
 }
 
 #[test]
-fn infer_cross_module_tuple_struct_as_value() {
+fn infer_cross_package_tuple_struct_as_value() {
     let mut fs = MockFileSystem::new();
 
     fs.add_file(
@@ -13495,12 +13502,12 @@ fn main() {
 "#;
     fs.add_file("main", "main.lis", source);
 
-    let result = infer_module("main", fs);
-    assert_multimodule_infer_error_snapshot!(result, source);
+    let result = infer_package("main", fs);
+    assert_multipackage_infer_error_snapshot!(result, source);
 }
 
 #[test]
-fn infer_cross_module_generic_tuple_struct_as_value() {
+fn infer_cross_package_generic_tuple_struct_as_value() {
     let mut fs = MockFileSystem::new();
 
     fs.add_file(
@@ -13521,12 +13528,12 @@ fn main() {
 "#;
     fs.add_file("main", "main.lis", source);
 
-    let result = infer_module("main", fs);
-    assert_multimodule_infer_error_snapshot!(result, source);
+    let result = infer_package("main", fs);
+    assert_multipackage_infer_error_snapshot!(result, source);
 }
 
 #[test]
-fn infer_generic_alias_to_cross_module_tuple_struct_as_value() {
+fn infer_generic_alias_to_cross_package_tuple_struct_as_value() {
     let mut fs = MockFileSystem::new();
 
     fs.add_file(
@@ -13549,8 +13556,8 @@ fn main() {
 "#;
     fs.add_file("main", "main.lis", source);
 
-    let result = infer_module("main", fs);
-    assert_multimodule_infer_error_snapshot!(result, source);
+    let result = infer_package("main", fs);
+    assert_multipackage_infer_error_snapshot!(result, source);
 }
 
 #[test]
@@ -13826,7 +13833,7 @@ fn main() {
   ()
 }
 "#;
-    fs.add_file(ENTRY_MODULE_ID, "main.lis", source);
+    fs.add_file(ENTRY_PACKAGE_ID, "main.lis", source);
     let result = compile_check(fs);
     assert!(
         !result
@@ -13855,7 +13862,7 @@ fn main() {
   c.tick()
 }
 "#;
-    fs.add_file(ENTRY_MODULE_ID, "main.lis", source);
+    fs.add_file(ENTRY_PACKAGE_ID, "main.lis", source);
     let result = compile_check(fs);
     assert!(
         !result
@@ -13890,12 +13897,12 @@ fn main() {
 "#;
     fs.add_file("main", "main.lis", source);
 
-    let result = infer_module("main", fs);
-    assert_multimodule_infer_error_snapshot!(result, source);
+    let result = infer_package("main", fs);
+    assert_multipackage_infer_error_snapshot!(result, source);
 }
 
 #[test]
-fn infer_enum_type_via_module_alias_used_as_value() {
+fn infer_enum_type_via_package_alias_used_as_value() {
     let mut fs = MockFileSystem::new();
 
     fs.add_file(
@@ -13917,8 +13924,8 @@ fn main() {
 "#;
     fs.add_file("main", "main.lis", source);
 
-    let result = infer_module("main", fs);
-    assert_multimodule_infer_error_snapshot!(result, source);
+    let result = infer_package("main", fs);
+    assert_multipackage_infer_error_snapshot!(result, source);
 }
 
 #[test]
@@ -14011,6 +14018,6 @@ fn main() {
 "#;
     fs.add_file("main", "main.lis", source);
 
-    let result = infer_module("main", fs);
-    assert_multimodule_infer_error_snapshot!(result, source);
+    let result = infer_package("main", fs);
+    assert_multipackage_infer_error_snapshot!(result, source);
 }
