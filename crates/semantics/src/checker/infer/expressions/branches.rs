@@ -1,5 +1,5 @@
 use crate::checker::EnvResolve;
-use crate::facts::{BranchArm, BranchSubsumption};
+use crate::checker::infer::context::{BranchArm, BranchSubsumption};
 use syntax::ast::BindingKind;
 use syntax::ast::{Expression, IfLetAlternative, MatchArm, Pattern, Span};
 use syntax::types::Type;
@@ -34,7 +34,7 @@ impl MatchArmsKind {
 }
 
 impl InferCtx<'_> {
-    pub(crate) fn reconcile_and_unify(
+    pub(super) fn reconcile_and_unify(
         &mut self,
         result_ty: &Type,
         branches: &[BranchArm],
@@ -64,14 +64,16 @@ impl InferCtx<'_> {
     }
 
     fn record_branch_subsumption(&mut self, result_ty: &Type, branches: &[BranchArm]) {
-        self.facts.branch_subsumptions.push(BranchSubsumption {
-            result_ty: result_ty.clone(),
-            arms: branches.to_vec(),
-        });
+        self.file_checks
+            .branch_subsumptions
+            .push(BranchSubsumption {
+                result_ty: result_ty.clone(),
+                arms: branches.to_vec(),
+            });
     }
 
     fn contains_pending_branch_var(&self, ty: &Type) -> bool {
-        self.facts.branch_subsumptions.iter().any(|o| {
+        self.file_checks.branch_subsumptions.iter().any(|o| {
             let Type::Var { id, .. } = self.env.shallow_resolve(&o.result_ty) else {
                 return false;
             };
@@ -80,20 +82,15 @@ impl InferCtx<'_> {
     }
 
     pub fn resolve_branch_subsumptions(&mut self) {
-        let obligations = std::mem::take(&mut self.facts.branch_subsumptions);
+        let obligations = std::mem::take(&mut self.file_checks.branch_subsumptions);
         for obligation in obligations.into_iter().rev() {
             for branch in &obligation.arms {
                 let arm = branch.ty.resolve_in(&self.env);
                 if arm.is_never() || arm.is_error() {
                     continue;
                 }
-                let store = self.store;
                 let (unification, reported) = self.tracking_diagnostics(|this| {
-                    InferCtx::new(this, store).try_unify(
-                        &obligation.result_ty,
-                        &branch.ty,
-                        &branch.span,
-                    )
+                    this.try_unify(&obligation.result_ty, &branch.ty, &branch.span)
                 });
                 if unification.is_err() && !reported {
                     let result = obligation.result_ty.resolve_in(&self.env);
@@ -112,7 +109,6 @@ impl InferCtx<'_> {
         branches: &[BranchArm],
         span: &Span,
     ) -> BranchReconciliation {
-        let store = self.store;
         if branches.len() < 2 {
             return BranchReconciliation::FirstBranch;
         }
@@ -123,14 +119,14 @@ impl InferCtx<'_> {
         for branch in &branches[1..] {
             let next = &branch.ty;
             if self
-                .speculatively(|this| InferCtx::new(this, store).try_unify(&common, next, span))
+                .speculatively(|this| this.try_unify(&common, next, span))
                 .is_ok()
             {
                 continue;
             }
 
             if self
-                .speculatively(|this| InferCtx::new(this, store).try_unify(next, &common, span))
+                .speculatively(|this| this.try_unify(next, &common, span))
                 .is_ok()
             {
                 common = next.clone();

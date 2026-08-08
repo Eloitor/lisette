@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 use syntax::EcoString;
 use syntax::ast::{BindingId, BindingKind, DeadCodeCause, Span};
-use syntax::program::{BindingMutation, TestFunction};
+use syntax::program::BindingMutation;
 use syntax::types::Type;
 
 #[derive(Debug, Default)]
@@ -39,18 +39,9 @@ pub struct Facts {
     pub always_failing_try_blocks: Vec<Span>,
     pub expression_only_fstrings: Vec<ExpressionOnlyFstringFact>,
     pub unprefixed_fstrings: Vec<UnprefixedFstringFact>,
-    pub interface_satisfied_methods: HashMap<(String, String), Vec<InterfaceSatisfaction>>,
-    pub(crate) test_functions: Vec<TestFunction>,
+    pub interface_satisfied_methods: HashMap<(String, String), InterfaceSatisfactions>,
 
     pub(crate) deferred: DeferredChecks,
-
-    /// Value-position `match`/`select` arms that did not reconcile, drained and
-    /// checked against the use-site result type at the end of `infer_file`.
-    pub(crate) branch_subsumptions: Vec<BranchSubsumption>,
-
-    /// Value-position selects with one shorthand receive and no default,
-    /// checked for exhaustiveness once the result type is pinned.
-    pub(crate) select_exhaustiveness_checks: Vec<SelectExhaustivenessCheck>,
 
     /// Suppresses contradictory lints from or-patterns whose binding sets disagree.
     pub or_pattern_error_spans: HashSet<Span>,
@@ -61,11 +52,6 @@ pub struct Facts {
     /// Span of every inferred function, so lints can attribute errors to
     /// the containing function.
     pub function_spans: Vec<Span>,
-
-    /// Resolved type for each generic-bound annotation, keyed by the
-    /// annotation's span. Lets emit render bounds from the resolved type
-    /// instead of re-resolving the annotation.
-    pub bound_types: HashMap<Span, Type>,
 }
 
 #[derive(Debug, Default)]
@@ -89,11 +75,53 @@ impl DeferredChecks {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct InterfaceSatisfaction {
-    pub impl_type_name: String,
-    /// The interface matches by source spelling, so renaming breaks it.
-    spelling_pinned: bool,
+#[derive(Debug, Clone, Copy)]
+enum InterfaceMatch {
+    Structural,
+    SpellingPinned,
+}
+
+#[derive(Debug, Default)]
+pub struct InterfaceSatisfactions {
+    impl_types: HashMap<String, InterfaceMatch>,
+}
+
+impl InterfaceSatisfactions {
+    fn record(&mut self, impl_type_name: String, spelling_pinned: bool) {
+        let match_kind = if spelling_pinned {
+            InterfaceMatch::SpellingPinned
+        } else {
+            InterfaceMatch::Structural
+        };
+        self.impl_types
+            .entry(impl_type_name)
+            .and_modify(|existing| {
+                if spelling_pinned {
+                    *existing = InterfaceMatch::SpellingPinned;
+                }
+            })
+            .or_insert(match_kind);
+    }
+
+    fn merge(&mut self, other: Self) {
+        for (impl_type_name, match_kind) in other.impl_types {
+            self.record(
+                impl_type_name,
+                matches!(match_kind, InterfaceMatch::SpellingPinned),
+            );
+        }
+    }
+
+    pub fn impl_type_names(&self) -> impl Iterator<Item = &str> {
+        self.impl_types.keys().map(String::as_str)
+    }
+
+    fn spelling_pinned(&self, impl_type_name: &str) -> bool {
+        matches!(
+            self.impl_types.get(impl_type_name),
+            Some(InterfaceMatch::SpellingPinned)
+        )
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -158,24 +186,6 @@ pub struct StatementTailCheck {
     pub span: Span,
 }
 
-#[derive(Debug, Clone)]
-pub(crate) struct BranchArm {
-    pub(crate) ty: Type,
-    pub(crate) span: Span,
-}
-
-#[derive(Debug, Clone)]
-pub struct BranchSubsumption {
-    pub(crate) result_ty: Type,
-    pub(crate) arms: Vec<BranchArm>,
-}
-
-#[derive(Debug, Clone)]
-pub struct SelectExhaustivenessCheck {
-    pub(crate) result_ty: Type,
-    pub(crate) span: Span,
-}
-
 impl Facts {
     pub fn new(allocator: Arc<BindingIdAllocator>) -> Self {
         Self {
@@ -187,15 +197,11 @@ impl Facts {
             expression_only_fstrings: Vec::new(),
             unprefixed_fstrings: Vec::new(),
             deferred: DeferredChecks::default(),
-            branch_subsumptions: Vec::new(),
-            select_exhaustiveness_checks: Vec::new(),
             or_pattern_error_spans: HashSet::default(),
             type_error_spans: HashSet::default(),
             function_spans: Vec::new(),
             usages: HashSet::default(),
             interface_satisfied_methods: HashMap::default(),
-            test_functions: Vec::new(),
-            bound_types: HashMap::default(),
         }
     }
 
@@ -320,10 +326,7 @@ impl Facts {
         self.interface_satisfied_methods
             .entry((package_id, method_name))
             .or_default()
-            .push(InterfaceSatisfaction {
-                impl_type_name,
-                spelling_pinned,
-            });
+            .record(impl_type_name, spelling_pinned);
     }
 
     /// Whether `type_name`'s `method_name` satisfies an interface that matches
@@ -336,11 +339,7 @@ impl Facts {
     ) -> bool {
         self.interface_satisfied_methods
             .get(&(package_id.to_string(), method_name.to_string()))
-            .is_some_and(|satisfactions| {
-                satisfactions
-                    .iter()
-                    .any(|s| s.spelling_pinned && s.impl_type_name == type_name)
-            })
+            .is_some_and(|satisfactions| satisfactions.spelling_pinned(type_name))
     }
 
     pub(crate) fn merge(&mut self, other: Facts) {
@@ -358,18 +357,12 @@ impl Facts {
             expression_only_fstrings,
             unprefixed_fstrings,
             deferred,
-            branch_subsumptions,
-            select_exhaustiveness_checks,
             or_pattern_error_spans,
             type_error_spans,
             function_spans,
             usages,
             interface_satisfied_methods,
-            test_functions,
-            bound_types,
         } = other;
-        self.test_functions.extend(test_functions);
-        self.bound_types.extend(bound_types);
 
         self.bindings.extend(bindings);
         self.dead_code.extend(dead_code);
@@ -380,20 +373,17 @@ impl Facts {
             .extend(expression_only_fstrings);
         self.unprefixed_fstrings.extend(unprefixed_fstrings);
         self.deferred.merge(deferred);
-        self.branch_subsumptions.extend(branch_subsumptions);
-        self.select_exhaustiveness_checks
-            .extend(select_exhaustiveness_checks);
         self.or_pattern_error_spans.extend(or_pattern_error_spans);
         self.type_error_spans.extend(type_error_spans);
         self.function_spans.extend(function_spans);
 
         self.usages.extend(usages);
 
-        for (key, impl_types) in interface_satisfied_methods {
+        for (key, satisfactions) in interface_satisfied_methods {
             self.interface_satisfied_methods
                 .entry(key)
                 .or_default()
-                .extend(impl_types);
+                .merge(satisfactions);
         }
     }
 }
@@ -588,24 +578,30 @@ mod tests {
     }
 
     #[test]
-    fn merge_concatenates_interface_method_impl_types() {
+    fn merge_unifies_interface_method_impl_types() {
         let allocator = Arc::new(BindingIdAllocator::new());
         let mut a = Facts::new(allocator.clone());
         let mut b = Facts::new(allocator);
 
-        a.mark_method_used_for_interface("m".into(), "f".into(), "A".into(), true);
+        a.mark_method_used_for_interface("m".into(), "f".into(), "A".into(), false);
+        b.mark_method_used_for_interface("m".into(), "f".into(), "A".into(), true);
         b.mark_method_used_for_interface("m".into(), "f".into(), "B".into(), false);
         b.mark_method_used_for_interface("m".into(), "g".into(), "C".into(), true);
 
         a.merge(b);
         assert_eq!(a.interface_satisfied_methods.len(), 2);
         assert_eq!(
-            a.interface_satisfied_methods[&("m".into(), "f".into())].len(),
+            a.interface_satisfied_methods[&("m".into(), "f".into())]
+                .impl_type_names()
+                .count(),
             2
         );
         assert_eq!(
-            a.interface_satisfied_methods[&("m".into(), "g".into())].len(),
+            a.interface_satisfied_methods[&("m".into(), "g".into())]
+                .impl_type_names()
+                .count(),
             1
         );
+        assert!(a.method_spelling_pinned_by_interface("m", "f", "A"));
     }
 }

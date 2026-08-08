@@ -4,33 +4,6 @@ use syntax::ast::BindingId;
 use syntax::ast::Span;
 use syntax::types::{Symbol, Type};
 
-#[derive(Debug, Clone, Default)]
-pub struct DepthCounter(usize);
-
-impl DepthCounter {
-    pub(crate) fn increment(&mut self) {
-        self.0 += 1;
-    }
-    pub(crate) fn decrement(&mut self) {
-        self.0 = self
-            .0
-            .checked_sub(1)
-            .expect("depth counter must be incremented before it is decremented");
-    }
-    pub(crate) fn is_active(&self) -> bool {
-        self.0 > 0
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum UseContext {
-    #[default]
-    Statement,
-    Value,
-    Callee,
-    AssignmentTarget,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TryCarrier {
     Result,
@@ -64,7 +37,7 @@ impl TryUsage {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct TryBlockContext {
     pub(crate) ok_ty: Type,
     pub(crate) err_ty: Type,
@@ -72,18 +45,12 @@ pub struct TryBlockContext {
     pub(crate) entry_loop_depth: usize,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct RecoverBlockContext {
     pub(crate) entry_loop_depth: usize,
 }
 
-#[derive(Debug, Clone)]
-pub(crate) enum LoopContext {
-    Statement,
-    Value(Type),
-}
-
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 enum PropagationContext {
     #[default]
     None,
@@ -91,32 +58,16 @@ enum PropagationContext {
     Recover(RecoverBlockContext),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) enum DeferredMapKeyCheck {
     Comparable { key: Type, span: Span },
     Bounds { key: Type, span: Span },
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug)]
 enum TestContext {
-    #[default]
-    None,
     Handle,
     Function(EcoString),
-}
-
-/// Traversal state inherited by nested lexical scopes and restored on pop.
-#[derive(Debug, Clone, Default)]
-struct InheritedContext {
-    loops: Vec<LoopContext>,
-    defer_block_depth: DepthCounter,
-    negation_depth: DepthCounter,
-    invariant_depth: DepthCounter,
-    use_context: UseContext,
-    dot_access_base: bool,
-    in_pattern: bool,
-    let_binding_rhs: bool,
-    test_context: TestContext,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -132,27 +83,23 @@ struct ScopedValue {
     kind: ScopedValueKind,
 }
 
-#[derive(Debug, Clone, Default)]
-struct GenericContext {
-    parameters: HashMap<String, GenericParameter>,
-}
-
 #[derive(Debug, Clone)]
 struct GenericParameter {
     index: usize,
-    bounds: Option<(Symbol, Vec<Type>)>,
+    qualified: Symbol,
+    bounds: Vec<Type>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Scope {
     values: HashMap<String, ScopedValue>,
-    generics: Option<GenericContext>,
+    generic_parameters: HashMap<String, GenericParameter>,
     pub(crate) fn_return_type: Option<Type>,
     is_lambda: bool,
     deferred_map_key_checks: Vec<DeferredMapKeyCheck>,
     propagation_context: PropagationContext,
     impl_receiver_type: Option<Type>,
-    inherited: InheritedContext,
+    test_context: Option<TestContext>,
 }
 
 impl Default for Scope {
@@ -165,13 +112,13 @@ impl Scope {
     fn new() -> Self {
         Scope {
             values: HashMap::default(),
-            generics: None,
+            generic_parameters: HashMap::default(),
             fn_return_type: None,
             is_lambda: false,
             deferred_map_key_checks: Vec::new(),
             propagation_context: PropagationContext::None,
             impl_receiver_type: None,
-            inherited: InheritedContext::default(),
+            test_context: None,
         }
     }
 
@@ -211,10 +158,6 @@ impl Scope {
             },
         );
     }
-
-    fn generics_mut(&mut self) -> &mut GenericContext {
-        self.generics.get_or_insert_with(GenericContext::default)
-    }
 }
 
 pub struct Scopes {
@@ -245,11 +188,7 @@ impl Scopes {
     }
 
     pub(crate) fn push(&mut self) {
-        let scope = Scope {
-            inherited: self.current().inherited.clone(),
-            ..Scope::new()
-        };
-        self.stack.push(scope);
+        self.stack.push(Scope::new());
     }
 
     pub(crate) fn pop(&mut self) {
@@ -329,39 +268,31 @@ impl Scopes {
     pub(crate) fn lookup_type_param(&self, name: &str) -> Option<usize> {
         self.stack.iter().rev().find_map(|scope| {
             scope
-                .generics
-                .as_ref()?
-                .parameters
+                .generic_parameters
                 .get(name)
                 .map(|parameter| parameter.index)
         })
     }
 
-    pub(crate) fn insert_type_param(&mut self, name: String, index: usize) {
-        self.current_mut().generics_mut().parameters.insert(
+    pub(crate) fn insert_type_param(&mut self, qualified: Symbol, index: usize) {
+        let name = qualified.last_segment().to_string();
+        self.current_mut().generic_parameters.insert(
             name,
             GenericParameter {
                 index,
-                bounds: None,
+                qualified,
+                bounds: Vec::new(),
             },
         );
     }
 
-    pub(crate) fn insert_trait_bound(&mut self, parameter: Symbol, bound: Type) {
-        let name = parameter.last_segment().to_string();
-        let generic = self
+    pub(crate) fn insert_trait_bound(&mut self, parameter: &str, bound: Type) {
+        let bounds = &mut self
             .current_mut()
-            .generics_mut()
-            .parameters
-            .get_mut(&name)
-            .expect("a generic parameter must be in scope before recording its bounds");
-        let (existing_parameter, bounds) = generic
-            .bounds
-            .get_or_insert_with(|| (parameter.clone(), Vec::new()));
-        assert_eq!(
-            existing_parameter, &parameter,
-            "one generic parameter cannot have multiple qualified identities"
-        );
+            .generic_parameters
+            .get_mut(parameter)
+            .expect("a generic parameter must be in scope before recording its bounds")
+            .bounds;
         if !bounds.contains(&bound) {
             bounds.push(bound);
         }
@@ -457,14 +388,14 @@ impl Scopes {
         let mut all_bounds: HashMap<Symbol, Vec<Type>> = HashMap::default();
         // Walk from bottom to top so inner scopes override outer
         for scope in &self.stack {
-            if let Some(generics) = &scope.generics {
-                all_bounds.retain(|parameter, _| {
-                    !generics.parameters.contains_key(parameter.last_segment())
-                });
-                for parameter in generics.parameters.values() {
-                    if let Some((qualified, bounds)) = &parameter.bounds {
-                        all_bounds.insert(qualified.clone(), bounds.clone());
-                    }
+            all_bounds.retain(|parameter, _| {
+                !scope
+                    .generic_parameters
+                    .contains_key(parameter.last_segment())
+            });
+            for parameter in scope.generic_parameters.values() {
+                if !parameter.bounds.is_empty() {
+                    all_bounds.insert(parameter.qualified.clone(), parameter.bounds.clone());
                 }
             }
         }
@@ -473,15 +404,9 @@ impl Scopes {
 
     pub(crate) fn for_each_bound_on_param<F: FnMut(&Type)>(&self, param_name: &str, mut visit: F) {
         for scope in self.stack.iter().rev() {
-            if let Some(parameter) = scope
-                .generics
-                .as_ref()
-                .and_then(|generics| generics.parameters.get(param_name))
-            {
-                if let Some((_, bounds)) = &parameter.bounds {
-                    for bound in bounds {
-                        visit(bound);
-                    }
+            if let Some(parameter) = scope.generic_parameters.get(param_name) {
+                for bound in &parameter.bounds {
+                    visit(bound);
                 }
                 return;
             }
@@ -489,141 +414,31 @@ impl Scopes {
     }
 
     pub(crate) fn mark_test_handle(&mut self) {
-        if matches!(self.current().inherited.test_context, TestContext::None) {
-            self.current_mut().inherited.test_context = TestContext::Handle;
+        if !self.has_test_handle() {
+            self.current_mut().test_context = Some(TestContext::Handle);
         }
     }
 
     pub(crate) fn has_test_handle(&self) -> bool {
-        !matches!(self.current().inherited.test_context, TestContext::None)
+        self.stack
+            .iter()
+            .rev()
+            .any(|scope| scope.test_context.is_some())
     }
 
     pub(crate) fn set_test_fn_name(&mut self, name: EcoString) {
-        self.current_mut().inherited.test_context = TestContext::Function(name);
+        self.current_mut().test_context = Some(TestContext::Function(name));
     }
 
     pub(crate) fn test_fn_name(&self) -> Option<&str> {
-        match &self.current().inherited.test_context {
-            TestContext::Function(name) => Some(name),
-            TestContext::None | TestContext::Handle => None,
-        }
-    }
-
-    pub(crate) fn enter_loop(&mut self, context: LoopContext) {
-        self.current_mut().inherited.loops.push(context);
-    }
-
-    pub(crate) fn exit_loop(&mut self) {
-        self.current_mut()
-            .inherited
-            .loops
-            .pop()
-            .expect("a loop must be entered before it is exited");
-    }
-
-    pub(crate) fn is_inside_loop(&self) -> bool {
-        !self.current().inherited.loops.is_empty()
-    }
-
-    pub(crate) fn loop_depth(&self) -> usize {
-        self.current().inherited.loops.len()
-    }
-
-    pub(crate) fn loop_break_type(&self) -> Option<&Type> {
-        match self.current().inherited.loops.last() {
-            Some(LoopContext::Value(ty)) => Some(ty),
-            Some(LoopContext::Statement) | None => None,
-        }
-    }
-
-    pub(crate) fn increment_defer_block_depth(&mut self) {
-        self.current_mut().inherited.defer_block_depth.increment();
-    }
-
-    pub(crate) fn decrement_defer_block_depth(&mut self) {
-        self.current_mut().inherited.defer_block_depth.decrement();
-    }
-
-    pub(crate) fn is_inside_defer_block(&self) -> bool {
-        self.current().inherited.defer_block_depth.is_active()
-    }
-
-    pub(crate) fn increment_negation_depth(&mut self) {
-        self.current_mut().inherited.negation_depth.increment();
-    }
-
-    pub(crate) fn decrement_negation_depth(&mut self) {
-        self.current_mut().inherited.negation_depth.decrement();
-    }
-
-    pub(crate) fn is_inside_negation(&self) -> bool {
-        self.current().inherited.negation_depth.is_active()
-    }
-
-    pub(crate) fn take_loops(&mut self) -> Vec<LoopContext> {
-        std::mem::take(&mut self.current_mut().inherited.loops)
-    }
-
-    pub(crate) fn restore_loops(&mut self, loops: Vec<LoopContext>) {
-        self.current_mut().inherited.loops = loops;
-    }
-
-    pub(crate) fn replace_use_context(&mut self, context: UseContext) -> UseContext {
-        let prev = self.current().inherited.use_context;
-        self.current_mut().inherited.use_context = context;
-        prev
-    }
-
-    pub(crate) fn restore_use_context(&mut self, ctx: UseContext) {
-        self.current_mut().inherited.use_context = ctx;
-    }
-
-    pub(crate) fn is_value_context(&self) -> bool {
-        self.current().inherited.use_context == UseContext::Value
-    }
-
-    pub(crate) fn is_callee_context(&self) -> bool {
-        self.current().inherited.use_context == UseContext::Callee
-    }
-
-    pub(crate) fn is_assignment_target_context(&self) -> bool {
-        self.current().inherited.use_context == UseContext::AssignmentTarget
-    }
-
-    pub(crate) fn is_dot_access_base(&self) -> bool {
-        self.current().inherited.dot_access_base
-    }
-
-    pub(crate) fn replace_dot_access_base(&mut self, value: bool) -> bool {
-        std::mem::replace(&mut self.current_mut().inherited.dot_access_base, value)
-    }
-
-    pub(crate) fn is_in_pattern(&self) -> bool {
-        self.current().inherited.in_pattern
-    }
-
-    pub(crate) fn replace_in_pattern(&mut self, value: bool) -> bool {
-        std::mem::replace(&mut self.current_mut().inherited.in_pattern, value)
-    }
-
-    pub(crate) fn is_let_binding_rhs(&self) -> bool {
-        self.current().inherited.let_binding_rhs
-    }
-
-    pub(crate) fn replace_let_binding_rhs(&mut self, value: bool) -> bool {
-        std::mem::replace(&mut self.current_mut().inherited.let_binding_rhs, value)
-    }
-
-    pub(crate) fn enter_invariant_position(&mut self) {
-        self.current_mut().inherited.invariant_depth.increment();
-    }
-
-    pub(crate) fn exit_invariant_position(&mut self) {
-        self.current_mut().inherited.invariant_depth.decrement();
-    }
-
-    pub(crate) fn is_inside_invariant_position(&self) -> bool {
-        self.current().inherited.invariant_depth.is_active()
+        self.stack
+            .iter()
+            .rev()
+            .find_map(|scope| scope.test_context.as_ref())
+            .and_then(|context| match context {
+                TestContext::Function(name) => Some(name.as_str()),
+                TestContext::Handle => None,
+            })
     }
 
     pub(crate) fn set_impl_receiver_type(&mut self, ty: Type) {
@@ -695,6 +510,18 @@ mod tests {
     }
 
     #[test]
+    fn popping_a_scope_reveals_the_enclosing_test_context() {
+        let mut scopes = Scopes::new();
+        scopes.set_test_fn_name("outer".into());
+        scopes.push();
+        scopes.set_test_fn_name("inner".into());
+
+        scopes.pop();
+
+        assert_eq!(scopes.test_fn_name(), Some("outer"));
+    }
+
+    #[test]
     fn known_try_carrier_replaces_an_unknown_observation() {
         let mut usage = TryUsage::default();
         usage.observe(None);
@@ -734,16 +561,6 @@ mod tests {
     }
 
     #[test]
-    fn dot_access_base_can_also_be_a_callee() {
-        let mut scopes = Scopes::new();
-        scopes.replace_use_context(UseContext::Callee);
-        scopes.replace_dot_access_base(true);
-
-        assert!(scopes.is_callee_context());
-        assert!(scopes.is_dot_access_base());
-    }
-
-    #[test]
     fn nested_recover_preserves_enclosing_try_context() {
         let mut scopes = Scopes::new();
         scopes.set_try_block_context(TryBlockContext {
@@ -774,10 +591,10 @@ mod tests {
     #[test]
     fn inner_type_parameter_shadows_outer_bounds_without_declaring_its_own() {
         let mut scopes = Scopes::new();
-        scopes.insert_type_param("T".into(), 0);
-        scopes.insert_trait_bound(Symbol::from_parts("package", "T"), Type::Error);
+        scopes.insert_type_param(Symbol::from_parts("package", "T"), 0);
+        scopes.insert_trait_bound("T", Type::Error);
         scopes.push();
-        scopes.insert_type_param("T".into(), 0);
+        scopes.insert_type_param(Symbol::from_parts("package", "T"), 0);
 
         let bounds = scopes.collect_all_trait_bounds();
 

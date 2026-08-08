@@ -7,7 +7,7 @@ use syntax::EcoString;
 use syntax::ast::{Annotation, Generic, Span};
 use syntax::program::DefinitionBody;
 use syntax::types::{
-    FunctionParameter, SubstitutionMap, Symbol, Type, substitute, unqualified_name,
+    FunctionParameter, Symbol, Type, build_named_substitution_map, substitute, unqualified_name,
 };
 
 use crate::checker::TaskState;
@@ -69,7 +69,7 @@ impl TaskState {
         annotation: &Annotation,
         span: &Span,
     ) -> Type {
-        let result = self.convert_to_type_mode(
+        self.convert_to_type_mode(
             store,
             annotation,
             span,
@@ -78,13 +78,7 @@ impl TaskState {
                 type_argument_checks: TypeArgumentChecks::Deferred,
                 position: TypePosition::Bound,
             },
-        );
-        if !result.contains_error() {
-            self.facts
-                .bound_types
-                .insert(annotation.get_span(), result.clone());
-        }
-        result
+        )
     }
 
     pub(crate) fn convert_to_type(
@@ -349,11 +343,7 @@ impl TaskState {
         let resolved_ty = if generics.is_empty() && concrete_args.is_empty() {
             body
         } else {
-            let map: SubstitutionMap = generics
-                .iter()
-                .cloned()
-                .zip(concrete_args.iter().cloned())
-                .collect();
+            let map = build_named_substitution_map(&generics, &concrete_args);
             substitute(&body, &map)
         };
 
@@ -394,7 +384,7 @@ impl TaskState {
         span: &Span,
         mode: ConvertMode,
     ) -> Type {
-        if params.len() == 1 && self.cursor.package_id == PRELUDE_PACKAGE_ID {
+        if params.len() == 1 && self.cursor.package_id() == PRELUDE_PACKAGE_ID {
             let element = self.convert_to_type_mode(store, &params[0], span, mode.nested());
             return Type::Nominal {
                 id: Symbol::from_parts("prelude", "Array"),
@@ -558,11 +548,7 @@ impl TaskState {
             })
             .collect();
 
-        let map: SubstitutionMap = generics
-            .iter()
-            .zip(args.iter())
-            .map(|(name, (_, ty))| (name.clone(), ty.clone()))
-            .collect();
+        let map = build_named_substitution_map(generics, args.iter().map(|(_, ty)| ty));
 
         (substitute(body, &map), args)
     }
@@ -612,7 +598,7 @@ impl TaskState {
 
         for (i, (name, param_span)) in undeclared.iter().enumerate() {
             self.scopes
-                .insert_type_param(name.clone(), generics.len() + i);
+                .insert_type_param(self.qualify_name(name), generics.len() + i);
             self.sink
                 .push(diagnostics::infer::undeclared_impl_type_param(
                     name,
@@ -736,7 +722,8 @@ impl TaskState {
         {
             return;
         }
-        self.pending_interface_bound_checks
+        self.pending
+            .post_inference_bound_checks
             .push((argument, required.clone(), span));
     }
 

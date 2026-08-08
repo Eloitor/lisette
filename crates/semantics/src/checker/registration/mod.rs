@@ -39,13 +39,31 @@ use syntax::types::{Bound, FunctionParameter, Symbol, Type};
 use super::{FileContext, TaskState, resolved_generic_bounds};
 use crate::store::Store;
 
-struct RegistrationFile {
-    id: u32,
-    imports: Vec<FileImport>,
-    items: Vec<Expression>,
+pub(crate) struct RegistrationFile {
+    pub(crate) id: u32,
+    pub(crate) imports: Vec<FileImport>,
+    pub(crate) items: Vec<Expression>,
+}
+
+pub(crate) struct UnregisteredPackage {
+    pub(crate) id: String,
+    files: Vec<RegistrationFile>,
+}
+
+#[must_use = "a registered package owns the ASTs that must be passed to inference"]
+pub struct RegisteredPackage {
+    pub(crate) id: String,
+    pub(crate) files: Vec<RegistrationFile>,
 }
 
 impl TaskState {
+    /// Completes work that must wait until every package has been registered.
+    pub fn finalize_registration(&mut self, store: &mut Store) {
+        self.finalize_equality(store);
+        self.check_pending_generic_bounds(store);
+        self.finalize_tests(store);
+    }
+
     fn definition_exists(&self, store: &Store, qualified_name: &str) -> bool {
         self.current_package(store)
             .definitions
@@ -67,13 +85,14 @@ impl TaskState {
             })
     }
 
-    pub fn register_package(&mut self, store: &mut Store, id: &str) {
+    pub fn register_package(&mut self, store: &mut Store, id: &str) -> RegisteredPackage {
         self.predeclare_package_types(store, id);
-        self.register_predeclared_package(store, id);
+        let package = Self::take_unregistered_package(store, id);
+        self.register_predeclared_package(store, package)
     }
 
-    pub(crate) fn register_predeclared_package(&mut self, store: &mut Store, id: &str) {
-        let mut files = {
+    pub(crate) fn take_unregistered_package(store: &mut Store, id: &str) -> UnregisteredPackage {
+        let files = {
             let package = store
                 .get_package_mut(id)
                 .expect("package must exist for registration");
@@ -87,65 +106,69 @@ impl TaskState {
                 })
                 .collect::<Vec<_>>()
         };
+        UnregisteredPackage {
+            id: id.to_string(),
+            files,
+        }
+    }
 
-        for file in &files {
+    pub(crate) fn register_predeclared_package(
+        &mut self,
+        store: &mut Store,
+        package: UnregisteredPackage,
+    ) -> RegisteredPackage {
+        let UnregisteredPackage { id, mut files } = package;
+
+        for file in &mut files {
             self.with_file_context_mut(
                 store,
                 FileContext::Standard {
-                    package_id: id,
+                    package_id: &id,
                     file_id: file.id,
                     imports: &file.imports,
                 },
-                |this, store| this.register_type_aliases(store, &file.items),
+                |this, store| this.register_type_aliases(store, &mut file.items),
             );
         }
 
-        for file in &files {
+        for file in &mut files {
             self.with_file_context_mut(
                 store,
                 FileContext::Standard {
-                    package_id: id,
+                    package_id: &id,
                     file_id: file.id,
                     imports: &file.imports,
                 },
-                |this, store| this.register_type_bodies(store, &file.items),
+                |this, store| this.register_type_bodies(store, &mut file.items),
             );
         }
 
-        for file in &files {
+        for file in &mut files {
             self.with_file_context_mut(
                 store,
                 FileContext::Standard {
-                    package_id: id,
+                    package_id: &id,
                     file_id: file.id,
                     imports: &file.imports,
                 },
                 |this, store| {
                     this.check_type_generic_bounds(store, &file.items);
-                    this.register_impl_blocks(store, &file.items);
-                    this.register_values(store, &file.items, &Visibility::Private);
+                    this.register_impl_blocks(store, &mut file.items);
+                    this.register_values(store, &mut file.items, &Visibility::Private);
                 },
             );
         }
 
-        for file in &mut files {
-            store
-                .get_file_mut(file.id)
-                .expect("registered file must remain in the store")
-                .items = std::mem::take(&mut file.items);
-        }
+        self.register_package_derived_attributes(store, &id, &files);
+        self.validate_package_embeds(store, &id);
+        self.check_package_recursive_types(store, &id);
 
-        self.register_package_derived_attributes(store, id);
-        self.validate_package_embeds(store, id);
-        self.check_package_recursive_types(store, id);
-
-        self.register_package_tests(store, id);
-        self.populate_package_generic_bounds(store, id);
+        self.register_package_tests(store, &id, &files);
+        RegisteredPackage { id, files }
     }
 
     pub(crate) fn predeclare_package_types(&mut self, store: &mut Store, id: &str) {
-        let type_name_entries =
-            self.with_package_cursor(id, |this| this.collect_package_type_name_entries(store, id));
+        let type_name_entries = self.collect_package_type_name_entries(store, id);
         self.insert_type_name_entries(store, id, type_name_entries);
     }
 }

@@ -8,7 +8,7 @@ fuzz_target!(|data: &[u8]| {
         return;
     };
 
-    let ast_result = lisette_syntax::build_ast(source, 0);
+    let mut ast_result = lisette_syntax::build_ast(source, 0);
     if ast_result.failed() {
         return;
     }
@@ -18,25 +18,25 @@ fuzz_target!(|data: &[u8]| {
     store.add_package("fuzz");
     lisette_semantics::prelude::parse_and_register_prelude(&mut store, &sink);
 
-    let mut checker = lisette_semantics::checker::TaskState::with_fresh_allocator();
-    checker.cursor.package_id = "fuzz".to_string();
+    let mut checker = lisette_semantics::checker::TaskState::for_package("fuzz");
     checker.put_prelude_in_scope(&store);
 
     checker.register_types_and_values(
         &mut store,
-        &ast_result.ast,
+        &mut ast_result.ast,
         &lisette_syntax::program::Visibility::Private,
     );
-    checker.finalize_equality(&mut store);
-    checker.check_pending_generic_bounds(&store);
+    checker.finalize_registration(&mut store);
 
+    let mut ctx = InferCtx::new(&mut checker, &store);
     for expression in ast_result.ast {
-        let type_var = checker.new_type_var();
-        let _ =
-            InferCtx::new(&mut checker, &store).infer_root_expression(expression, &type_var);
+        let type_var = ctx.new_type_var();
+        let _ = ctx.infer_root_expression(expression, &type_var);
 
-        if checker.failed() {
+        if ctx.failed() {
             break;
         }
     }
+    ctx.resolve_branch_subsumptions();
+    ctx.resolve_select_exhaustiveness();
 });

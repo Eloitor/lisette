@@ -42,7 +42,7 @@ impl InferCtx<'_> {
                             &numeric,
                             span,
                         );
-                    } else if !self.scopes.is_inside_negation() {
+                    } else if !self.is_inside_negation() {
                         self.check_integer_literal_overflow(value, &numeric, span);
                     }
                     resolved.clone()
@@ -99,7 +99,7 @@ impl InferCtx<'_> {
                 };
 
                 if !raw
-                    && !self.scopes.is_in_pattern()
+                    && !self.is_in_pattern()
                     && let Some(names) = interpolation_holes(&value)
                     && names.iter().all(|name| self.hole_would_interpolate(name))
                 {
@@ -185,7 +185,7 @@ impl InferCtx<'_> {
                 let unified = self.unify(expected_ty, &slice_ty, &span);
 
                 if new_elements.is_empty() && unified {
-                    let package_id = self.cursor.package_id.clone();
+                    let package_id = self.cursor.package_id().to_string();
                     self.facts
                         .deferred
                         .empty_literals

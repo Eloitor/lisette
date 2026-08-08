@@ -172,7 +172,7 @@ impl InferCtx<'_> {
             (Type::Var { id, .. }, _) => self.unify_type_variable(*id, &r2, span, false),
             (_, Type::Var { id, .. }) => self.unify_type_variable(*id, &r1, span, true),
 
-            _ if r1_is_unknown && self.scopes.is_inside_invariant_position() => {
+            _ if r1_is_unknown && self.is_inside_invariant_position() => {
                 Err(UnifyError::TypeMismatch)
             }
             _ if r1_is_unknown => Ok(()),
@@ -277,9 +277,9 @@ impl InferCtx<'_> {
             }
 
             (
-                Nominal { id, params },
+                interface_ty @ Nominal { .. },
                 actual @ (Type::Simple(_) | Type::Compound { .. } | Type::Array { .. }),
-            ) => self.try_satisfy_interface(actual, id, params, span),
+            ) => self.try_satisfy_interface(actual, interface_ty, span),
 
             (Nominal { .. }, Function(_)) if let Some(u) = store.underlying_type(&r1) => {
                 self.try_unify(&u, &r2, span)
@@ -318,13 +318,6 @@ impl InferCtx<'_> {
         self.store
             .get_definition(id)
             .is_some_and(|definition| definition.is_transparent_type_alias())
-    }
-
-    pub(super) fn in_invariant_position<T>(&mut self, unify: impl FnOnce(&mut Self) -> T) -> T {
-        self.scopes.enter_invariant_position();
-        let result = unify(self);
-        self.scopes.exit_invariant_position();
-        result
     }
 
     fn unify_refs(&mut self, t1: &Type, t2: &Type, span: &Span) -> Result<(), UnifyError> {
@@ -482,7 +475,7 @@ impl InferCtx<'_> {
             return Ok(());
         }
 
-        if self.scopes.is_inside_invariant_position() {
+        if self.is_inside_invariant_position() {
             return Err(UnifyError::TypeMismatch);
         }
 
@@ -503,24 +496,23 @@ impl InferCtx<'_> {
             return self.try_unify(t1, &params2[0], span);
         }
 
-        self.try_satisfy_interface(t2, symbol1, params1, span)
+        self.try_satisfy_interface(t2, t1, span)
     }
 
     fn try_satisfy_interface(
         &mut self,
         actual: &Type,
-        interface_id: &str,
-        type_args: &[Type],
+        interface_ty: &Type,
         span: &Span,
     ) -> Result<(), UnifyError> {
-        if self.scopes.is_inside_invariant_position() {
+        if self.is_inside_invariant_position() {
             return Err(UnifyError::TypeMismatch);
         }
-        let Some(interface) = self.store.get_interface(interface_id).cloned() else {
+        if !self.store.is_interface(interface_ty) {
             return Err(UnifyError::TypeMismatch);
-        };
-        self.satisfies_interface(actual, &interface, interface_id, type_args, span)
-            .and_then(|()| self.check_pointer_receivers(actual, &interface, interface_id, span))
+        }
+        self.satisfies_interface(actual, interface_ty, span)
+            .and_then(|()| self.check_pointer_receivers(actual, interface_ty, span))
             .map_err(|_| UnifyError::AlreadyReported)
     }
 
@@ -655,23 +647,19 @@ impl InferCtx<'_> {
         }
 
         let interface_ty = bound.ty.resolve_in(&self.env);
-        let Type::Nominal { id, params, .. } = interface_ty else {
+        if !store.is_interface(&interface_ty) {
             return;
-        };
-
-        let Some(interface) = store.get_interface(&id).cloned() else {
-            return;
-        };
+        }
 
         if self
-            .satisfies_interface(&resolved_ty, &interface, &id, &params, span)
+            .satisfies_interface(&resolved_ty, &interface_ty, span)
             .is_ok()
             && !self.generic_absorbed_via_ref_param(
                 &bound.generic,
                 signature_params.iter().map(|param| &param.ty),
             )
         {
-            let _ = self.check_pointer_receivers(&resolved_ty, &interface, &id, span);
+            let _ = self.check_pointer_receivers(&resolved_ty, &interface_ty, span);
         }
     }
 

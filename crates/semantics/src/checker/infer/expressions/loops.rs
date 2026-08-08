@@ -1,5 +1,5 @@
 use crate::checker::EnvResolve;
-use crate::checker::scopes::LoopContext;
+use crate::checker::infer::context::LoopContext;
 use syntax::ast::BindingKind;
 use syntax::ast::{Binding, Expression, Pattern, Span};
 use syntax::types::Type;
@@ -23,16 +23,6 @@ fn iter_seq_kind(ty: &Type) -> Option<IterSeqKind> {
 }
 
 impl InferCtx<'_> {
-    fn infer_in_loop_context<F>(&mut self, context: LoopContext, f: F) -> Expression
-    where
-        F: FnOnce(&mut Self) -> Expression,
-    {
-        self.scopes.enter_loop(context);
-        let result = f(self);
-        self.scopes.exit_loop();
-        result
-    }
-
     pub(super) fn infer_loop(
         &mut self,
         body: Box<Expression>,
@@ -41,7 +31,7 @@ impl InferCtx<'_> {
     ) -> Expression {
         let break_ty = self.new_type_var();
 
-        let new_body = self.infer_in_loop_context(LoopContext::Value(break_ty.clone()), |this| {
+        let new_body = self.with_loop(LoopContext::Value(break_ty.clone()), |this| {
             this.infer_expression(*body, &Type::ignored())
         });
 
@@ -77,7 +67,7 @@ impl InferCtx<'_> {
                 .push(diagnostics::infer::propagate_in_condition(span));
         }
 
-        let new_body = self.infer_in_loop_context(LoopContext::Statement, |s| {
+        let new_body = self.with_loop(LoopContext::Statement, |s| {
             s.infer_expression(*body, &Type::ignored())
         });
 
@@ -112,7 +102,7 @@ impl InferCtx<'_> {
                 scrutinee_ty.resolve_in(&this.env),
                 BindingKind::WhileLet,
             );
-            let new_body = this.infer_in_loop_context(LoopContext::Statement, |s| {
+            let new_body = this.with_loop(LoopContext::Statement, |s| {
                 s.infer_expression(*body, &Type::ignored())
             });
             (new_pattern, new_body)
@@ -176,7 +166,7 @@ impl InferCtx<'_> {
                 }
             }
 
-            let new_body = this.infer_in_loop_context(LoopContext::Statement, |s| {
+            let new_body = this.with_loop(LoopContext::Statement, |s| {
                 s.infer_expression(*body, &Type::ignored())
             });
             (new_binding, new_body)
@@ -330,19 +320,15 @@ impl InferCtx<'_> {
         self.check_break_in_defer_block(span);
 
         let new_value = if let Some(val) = value {
-            if self.scopes.loop_break_type().is_none() && self.scopes.is_inside_loop() {
+            if self.loop_break_type().is_none() && self.is_inside_loop() {
                 self.sink
                     .push(diagnostics::infer::break_value_in_non_loop(span));
             }
-            let break_ty = self
-                .scopes
-                .loop_break_type()
-                .cloned()
-                .unwrap_or_else(|| Type::Error);
+            let break_ty = self.loop_break_type().cloned().unwrap_or(Type::Error);
             let inferred = self.with_value_context(|s| s.infer_expression(*val, &break_ty));
             Some(Box::new(inferred))
         } else {
-            if let Some(break_ty) = self.scopes.loop_break_type().cloned() {
+            if let Some(break_ty) = self.loop_break_type().cloned() {
                 let unit = self.type_unit();
                 self.unify(&break_ty, &unit, &span);
             }

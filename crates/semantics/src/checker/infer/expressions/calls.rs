@@ -139,10 +139,10 @@ impl InferCtx<'_> {
         let store = self.store;
         let callee_ty = self.new_type_var();
 
-        let callee_expression = self
-            .with_use_context(crate::checker::scopes::UseContext::Callee, |state| {
-                state.infer_expression(*expression, &callee_ty)
-            });
+        let callee_expression = self.with_use_context(
+            crate::checker::infer::context::UseContext::Callee,
+            |state| state.infer_expression(*expression, &callee_ty),
+        );
 
         let forall_ty = self.resolve_callee_forall_type(&callee_expression, &type_args);
         let (callee_ty, type_arguments) =
@@ -171,7 +171,7 @@ impl InferCtx<'_> {
         } = self.extract_call_signature(callee_ty, &args, &callee_expression);
 
         if self.is_panic_call(&callee_expression)
-            && self.scopes.is_value_context()
+            && self.is_value_context()
             && !expected_ty.is_unit()
             && !expected_ty.is_ignored()
             && !expected_ty.is_never()
@@ -188,9 +188,7 @@ impl InferCtx<'_> {
                     || !store.contains_unknown(&resolved_expected))
             {
                 let peeled = store.deep_resolve_alias(&resolved_expected);
-                let _ = self.speculatively(|this| {
-                    InferCtx::new(this, store).try_unify(&peeled, &return_ty, &span)
-                });
+                let _ = self.speculatively(|this| this.try_unify(&peeled, &return_ty, &span));
             }
         }
 
@@ -416,7 +414,7 @@ impl InferCtx<'_> {
     }
 
     fn record_generic_call_check(&mut self, ty: Type, span: Span, target: DeferredCallCheckTarget) {
-        let package_id = self.cursor.package_id.clone();
+        let package_id = self.cursor.package_id().to_string();
         match target {
             DeferredCallCheckTarget::GenericCall => {
                 self.facts
@@ -547,7 +545,7 @@ impl InferCtx<'_> {
         let array_ty = match resolved {
             Some((elem, len)) => {
                 let array_ty = self.type_array(len, elem);
-                let from_package = self.cursor.package_id.clone();
+                let from_package = self.cursor.package_id().to_string();
                 if let Err(no_zero) = self.has_zero(&array_ty, &from_package) {
                     self.sink.push(diagnostics::infer::array_new_no_zero(
                         &no_zero.leaf_ty.stringify(),
@@ -609,7 +607,7 @@ impl InferCtx<'_> {
                     .get(member)
                     .cloned()
                 {
-                    return method_ty;
+                    return method_ty.ty;
                 }
 
                 let stripped = receiver_ty.strip_refs();
@@ -1058,23 +1056,19 @@ impl InferCtx<'_> {
             }
 
             let interface_ty = bound.ty.resolve_in(&self.env);
-            let Type::Nominal { id, params, .. } = interface_ty else {
+            if !store.is_interface(&interface_ty) {
                 continue;
-            };
-
-            let Some(interface) = store.get_interface(&id).cloned() else {
-                continue;
-            };
+            }
 
             if self
-                .satisfies_interface(&resolved_ty, &interface, &id, &params, &span)
+                .satisfies_interface(&resolved_ty, &interface_ty, &span)
                 .is_ok()
                 && !self.generic_absorbed_via_ref_param(
                     &bound.generic,
                     signature_params.iter().map(|param| &param.ty),
                 )
             {
-                let _ = self.check_pointer_receivers(&resolved_ty, &interface, &id, &span);
+                let _ = self.check_pointer_receivers(&resolved_ty, &interface_ty, &span);
             }
         }
     }

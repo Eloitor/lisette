@@ -4,7 +4,7 @@ use syntax::attributes::test_attribute;
 use syntax::program::TestFunction;
 use syntax::types::{Symbol, Type};
 
-use super::TaskState;
+use super::{RegistrationFile, TaskState};
 use crate::store::Store;
 
 fn test_context_type() -> Type {
@@ -25,14 +25,21 @@ pub(crate) fn normalize_test_params(mut params: Vec<Binding>, is_test: bool) -> 
 }
 
 impl TaskState {
-    /// Collect and validate a package's `#[test]` functions into `facts`
-    /// (merge-safe, since this runs during parallel registration).
-    pub(super) fn register_package_tests(&mut self, store: &Store, package_id: &str) {
-        let package = store.get_package(package_id).expect("package must exist");
+    /// Collect and validate a package's `#[test]` functions for finalization.
+    /// The pending records are merge-safe across parallel registration tasks.
+    pub(super) fn register_package_tests(
+        &mut self,
+        store: &Store,
+        package_id: &str,
+        files: &[RegistrationFile],
+    ) {
         let context_shadowed = package_shadows_test_context(store, package_id);
         let mut records: Vec<TestFunction> = Vec::new();
-        for file in package.files.values() {
-            let in_test_file = file.is_test();
+        for file in files {
+            let in_test_file = store
+                .get_file(file.id)
+                .expect("registered file must remain in the store")
+                .is_test();
             for item in &file.items {
                 collect_test_candidates(
                     item,
@@ -44,7 +51,7 @@ impl TaskState {
                 );
             }
         }
-        self.facts.test_functions.extend(records);
+        self.pending.test_functions.extend(records);
     }
 
     pub(crate) fn collect_cached_package_tests(&mut self, store: &Store, package_id: &str) {
@@ -70,11 +77,11 @@ impl TaskState {
                 );
             }
         }
-        self.facts.test_functions.extend(records);
+        self.pending.test_functions.extend(records);
     }
 
-    pub fn finalize_tests(&mut self, store: &mut Store) {
-        for test in std::mem::take(&mut self.facts.test_functions) {
+    pub(super) fn finalize_tests(&mut self, store: &mut Store) {
+        for test in std::mem::take(&mut self.pending.test_functions) {
             store.test_index.push(test);
         }
     }

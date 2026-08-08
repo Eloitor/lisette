@@ -16,28 +16,30 @@ use crate::facts::{BindingIdAllocator, Facts};
 use crate::store::Store;
 use diagnostics::LocalSink;
 use ecow::EcoString;
-use registration::derived_attributes::DerivedAttributes;
+use registration::derived_attributes::EqualityAttributes;
 use scopes::Scopes;
 use syntax::ast::{Annotation, Expression, Generic, ImportAlias, Span};
 use syntax::program::{
-    Definition, DefinitionBody, FileImport, MethodSignatures, NativeTypeKind, Package,
+    Definition, DefinitionBody, FileImport, Methods, NativeTypeKind, Package,
     go_import_default_name,
 };
 use syntax::types::{Bound, SubstitutionMap, Symbol, Type, substitute};
 
 pub(crate) use context::FileContext;
 pub use infer::expressions::comparison::{check_never_comparable, check_not_comparable};
-pub(crate) use state::TaskOutput;
+pub use registration::RegisteredPackage;
+pub(crate) use registration::UnregisteredPackage;
 pub use state::{Cursor, TaskState};
+pub(crate) use state::{InferredFile, TaskOutput};
 pub use type_env::{EnvResolve, TypeEnv, VarState};
 
 impl TaskState {
     fn is_d_lis(&self, store: &Store) -> bool {
-        let Some(file_id) = self.cursor.file_id else {
+        let Some(file_id) = self.cursor.file_id() else {
             return false;
         };
 
-        let Some(package) = store.get_package(&self.cursor.package_id) else {
+        let Some(package) = store.get_package(self.cursor.package_id()) else {
             return false;
         };
 
@@ -50,39 +52,41 @@ impl TaskState {
 
     fn current_package<'a>(&self, store: &'a Store) -> &'a Package {
         store
-            .get_package(&self.cursor.package_id)
+            .get_package(self.cursor.package_id())
             .expect("current package must exist in store")
     }
 
     fn current_package_mut<'a>(&self, store: &'a mut Store) -> &'a mut Package {
         store
-            .get_package_mut(&self.cursor.package_id)
+            .get_package_mut(self.cursor.package_id())
             .expect("current package must exist in store")
     }
 
     fn qualify_name(&self, name: &str) -> Symbol {
-        Symbol::from_parts(&self.cursor.package_id, name)
+        Symbol::from_parts(self.cursor.package_id(), name)
     }
 
     pub(crate) fn put_in_scope(&mut self, generics: &[Generic]) {
         for (index, generic) in generics.iter().enumerate() {
             self.scopes
-                .insert_type_param(generic.name.to_string(), index);
+                .insert_type_param(self.qualify_name(&generic.name), index);
         }
     }
 
     pub(crate) fn resolve_generic_bounds(
         &mut self,
         store: &Store,
-        generics: &[Generic],
+        generics: &mut [Generic],
         span: &Span,
-    ) -> Vec<Generic> {
-        let mut resolved = generics.to_vec();
-        for generic in &mut resolved {
-            generic.resolve_bounds_with(|bound| self.register_bound_annotation(store, bound, span));
+    ) {
+        for generic in &mut *generics {
+            if !generic.bounds_are_resolved() {
+                generic.resolve_bounds_with(|bound| {
+                    self.register_bound_annotation(store, bound, span)
+                });
+            }
         }
-        self.record_resolved_generic_bounds(&resolved);
-        resolved
+        self.record_resolved_generic_bounds(generics);
     }
 
     fn record_resolved_generic_bounds(&mut self, generics: &[Generic]) {
@@ -99,20 +103,15 @@ impl TaskState {
     fn ensure_generic_bounds(
         &mut self,
         store: &Store,
-        generics: Vec<Generic>,
+        mut generics: Vec<Generic>,
         span: &Span,
     ) -> Vec<Generic> {
-        if generics.iter().all(Generic::bounds_are_resolved) {
-            self.record_resolved_generic_bounds(&generics);
-            generics
-        } else {
-            self.resolve_generic_bounds(store, &generics, span)
-        }
+        self.resolve_generic_bounds(store, &mut generics, span);
+        generics
     }
 
     fn record_generic_bound(&mut self, parameter: &str, bound: Type) {
-        let qualified_parameter = self.qualify_name(parameter);
-        self.scopes.insert_trait_bound(qualified_parameter, bound);
+        self.scopes.insert_trait_bound(parameter, bound);
     }
 
     fn parameter_satisfies_bound(&self, parameter: &str, target: infer::BuiltinBound) -> bool {

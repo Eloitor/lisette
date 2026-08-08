@@ -27,7 +27,7 @@ impl InferCtx<'_> {
             (
                 self.get_all_methods(store, &args.deref_ty)
                     .get(args.member_name)
-                    .cloned()?,
+                    .map(|method| method.ty.clone())?,
                 true,
                 self.resolve_instance_method_definition(&args.deref_ty, args.member_name),
             )
@@ -47,14 +47,14 @@ impl InferCtx<'_> {
             if self.is_type_level_receiver(args.expression)
                 && self.method_is_promoted(&args.deref_ty, args.member_name)
             {
-                return self.as_promoted_method_expression(args, &method_ty);
+                return self.as_promoted_method_expression(args, &method_ty.ty);
             }
 
             let resolved_definition =
-                self.check_instance_method_access(&args.deref_ty, &method_ty, args, None);
+                self.check_instance_method_access(&args.deref_ty, &method_ty.ty, args, None);
 
             let is_exported = self.is_dot_access_exported(&args.deref_ty, args.member_name);
-            (method_ty, is_exported, resolved_definition)
+            (method_ty.ty, is_exported, resolved_definition)
         };
 
         let (mut method_ty, _) = self.instantiate(&method_ty);
@@ -72,7 +72,7 @@ impl InferCtx<'_> {
             return Some(expression);
         }
 
-        if self.scopes.is_callee_context() && self.is_type_level_receiver(args.expression) {
+        if self.is_callee_context() && self.is_type_level_receiver(args.expression) {
             self.sink.push(diagnostics::infer::type_used_as_value(
                 &args.expression.as_dotted_path().unwrap_or_default(),
                 args.expression.get_span(),
@@ -158,13 +158,12 @@ impl InferCtx<'_> {
         let type_package = store
             .package_for_qualified_name(declaring_type)
             .unwrap_or(declaring_type.as_str());
-        if type_package != self.cursor.package_id {
+        if type_package != self.cursor.package_id() {
             return true;
         }
-        let method_key = declaring_type.with_segment(member_name);
         store
-            .get_definition(&method_key)
-            .map(|d| d.visibility.is_public())
+            .get_method(declaring_type, member_name)
+            .map(|method| method.visibility.is_public())
             .unwrap_or(false)
     }
 
@@ -181,18 +180,21 @@ impl InferCtx<'_> {
         let resolved_definition = resolved_definition
             .or_else(|| self.resolve_instance_method_definition(deref_ty, args.member_name));
         if let Some(method_key) = resolved_definition.as_ref() {
-            if let Some(definition_span) = self.get_definition_name_span(store, method_key) {
-                self.facts.add_usage(*args.span, definition_span);
-            }
-
             let declaring = method_key
                 .without_last_segment()
                 .unwrap_or(method_key.as_str());
+            if let Some(definition_span) = store
+                .get_method(declaring, args.member_name)
+                .and_then(|method| method.name_span)
+            {
+                self.facts.add_usage(*args.span, definition_span);
+            }
+
             if matches!(deref_ty, Type::Nominal { .. })
                 && self.is_foreign_type(declaring)
-                && let Some(def) = store.get_definition(method_key)
-                && matches!(def.body, DefinitionBody::Value { .. })
-                && !def.visibility.is_public()
+                && store
+                    .get_method(declaring, args.member_name)
+                    .is_some_and(|method| !method.visibility.is_public())
             {
                 self.sink.push(diagnostics::infer::private_method_access(
                     args.member_name,
@@ -205,7 +207,7 @@ impl InferCtx<'_> {
             }
         }
 
-        if !self.scopes.is_callee_context()
+        if !self.is_callee_context()
             && (matches!(deref_ty, Type::Nominal { id, .. }
                     if self.store.is_ufcs_method(id.as_str(), args.member_name))
                 || matches!(store.deep_resolve_alias(deref_ty), Type::Nominal { id, .. }
@@ -228,7 +230,7 @@ impl InferCtx<'_> {
         let store = self.store;
         if let Type::Nominal { id, .. } = receiver_type {
             let direct = id.with_segment(method_name);
-            if store.get_definition(&direct).is_some() {
+            if store.get_method(id, method_name).is_some() {
                 return Some(direct);
             }
             if promotion::has_direct_embed(store, receiver_type)
@@ -236,7 +238,10 @@ impl InferCtx<'_> {
                     promotion::resolve_selector(store, receiver_type, method_name)
             {
                 let promoted = member.declaring_type.with_segment(method_name);
-                if store.get_definition(&promoted).is_some() {
+                if store
+                    .get_method(&member.declaring_type, method_name)
+                    .is_some()
+                {
                     return Some(promoted);
                 }
             }
@@ -252,7 +257,7 @@ impl InferCtx<'_> {
         };
         let resolved_definition = owner.with_segment(method_name);
         store
-            .get_definition(&resolved_definition)
+            .get_method(&owner, method_name)
             .is_some()
             .then_some(resolved_definition)
     }
@@ -278,7 +283,7 @@ impl InferCtx<'_> {
                 if inner.get_type().resolve_in(&self.env).as_import_namespace().is_some()
         );
 
-        if !is_cross_package_type_access || self.scopes.is_callee_context() {
+        if !is_cross_package_type_access || self.is_callee_context() {
             return None;
         }
 
@@ -532,7 +537,7 @@ impl InferCtx<'_> {
         self.unify(args.expected_ty, &method_ty, args.span);
 
         let type_package = store.package_for_qualified_name(&id).unwrap_or(&id);
-        let is_cross_package = type_package != self.cursor.package_id;
+        let is_cross_package = type_package != self.cursor.package_id();
         let is_exported = is_public || is_cross_package;
         Some(args.build_dot_access(
             method_ty,
@@ -551,16 +556,15 @@ impl InferCtx<'_> {
             return false;
         };
         let type_package = store.package_for_qualified_name(&id).unwrap_or(&id);
-        let is_cross_package = type_package != self.cursor.package_id;
+        let is_cross_package = type_package != self.cursor.package_id();
 
         if is_cross_package {
             return true;
         }
 
-        let method_key = id.with_segment(member_name);
         store
-            .get_definition(&method_key)
-            .map(|d| d.visibility.is_public())
+            .get_method(&id, member_name)
+            .map(|method| method.visibility.is_public())
             .unwrap_or(false)
     }
 }

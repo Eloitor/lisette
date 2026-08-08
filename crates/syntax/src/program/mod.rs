@@ -5,8 +5,9 @@ mod package;
 mod resolution;
 
 pub use definition::{
-    AliasKind, Attributes, Definition, DefinitionBody, Interface, MethodSignatures, TypeAttribute,
-    ValueKind, Visibility,
+    AliasKind, Attributes, Definition, DefinitionBody, Interface, InterfaceInstance,
+    InterfaceRequirement, Method, Methods, TypeAttribute, ValueKind, Visibility,
+    interface_instances, interface_requirements, methods_for_type,
 };
 pub use emit_input::{
     BindingMutation, EmitInput, EqualityIndex, MutationInfo, TestFunction, TestIndex, UnusedInfo,

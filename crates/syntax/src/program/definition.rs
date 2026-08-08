@@ -4,7 +4,7 @@ use ecow::EcoString;
 
 use crate::ast::{Annotation, EnumVariant, Generic, Literal, Span, StructFields};
 use crate::types::{
-    FunctionParameter, Type, build_substitution_map, substitute, type_args_match_params,
+    FunctionParameter, Symbol, Type, build_substitution_map, substitute, type_args_match_params,
 };
 
 #[derive(Debug, Clone)]
@@ -47,19 +47,19 @@ pub enum DefinitionBody {
     TypeAlias {
         generics: Vec<Generic>,
         alias: AliasKind,
-        methods: MethodSignatures,
+        methods: Methods,
         attributes: Attributes,
     },
     Enum {
         generics: Vec<Generic>,
         variants: Vec<EnumVariant>,
-        methods: MethodSignatures,
+        methods: Methods,
         attributes: Attributes,
     },
     Struct {
         generics: Vec<Generic>,
         fields: StructFields,
-        methods: MethodSignatures,
+        methods: Methods,
         attributes: Attributes,
     },
     Interface {
@@ -274,21 +274,23 @@ impl Definition {
         )
     }
 
-    pub fn methods_mut(&mut self) -> Option<&mut MethodSignatures> {
+    pub fn methods_mut(&mut self) -> Option<&mut Methods> {
         match &mut self.body {
             DefinitionBody::Struct { methods, .. } => Some(methods),
             DefinitionBody::TypeAlias { methods, .. } => Some(methods),
             DefinitionBody::Enum { methods, .. } => Some(methods),
-            _ => None,
+            DefinitionBody::Interface { definition } => Some(&mut definition.methods),
+            DefinitionBody::Value { .. } => None,
         }
     }
 
-    pub fn methods(&self) -> Option<&MethodSignatures> {
+    pub fn methods(&self) -> Option<&Methods> {
         match &self.body {
             DefinitionBody::Struct { methods, .. }
             | DefinitionBody::TypeAlias { methods, .. }
             | DefinitionBody::Enum { methods, .. } => Some(methods),
-            DefinitionBody::Interface { .. } | DefinitionBody::Value { .. } => None,
+            DefinitionBody::Interface { definition } => Some(&definition.methods),
+            DefinitionBody::Value { .. } => None,
         }
     }
 
@@ -307,7 +309,7 @@ impl Definition {
         };
         methods
             .get(method)
-            .is_some_and(|method_ty| is_ufcs_method_type(method_ty, base_generics_count))
+            .is_some_and(|method| is_ufcs_method_type(&method.ty, base_generics_count))
     }
 
     fn attributes(&self) -> Option<&Attributes> {
@@ -401,7 +403,246 @@ fn is_ufcs_method_type(method_ty: &Type, base_generics_count: usize) -> bool {
     false
 }
 
-pub type MethodSignatures = HashMap<EcoString, Type>;
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct Method {
+    pub source_name: EcoString,
+    pub ty: Type,
+    pub visibility: Visibility,
+    pub name_span: Option<Span>,
+    pub doc: Option<String>,
+    pub allowed_lints: Vec<String>,
+    pub go_hints: Vec<String>,
+}
+
+impl Method {
+    pub fn with_type(&self, ty: Type) -> Self {
+        Self { ty, ..self.clone() }
+    }
+
+    fn with_receiver_placeholder(self) -> Self {
+        let Self {
+            source_name,
+            ty,
+            visibility,
+            name_span,
+            doc,
+            allowed_lints,
+            go_hints,
+        } = self;
+        Self {
+            source_name,
+            ty: ty.with_receiver_placeholder(),
+            visibility,
+            name_span,
+            doc,
+            allowed_lints,
+            go_hints,
+        }
+    }
+}
+
+pub type Methods = HashMap<EcoString, Method>;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct InterfaceInstance {
+    pub ty: Type,
+    pub parent_of: Option<Symbol>,
+}
+
+/// Instantiate an interface and its complete parent hierarchy exactly once.
+/// Package-qualified structural identity prevents same-named interfaces from
+/// collapsing, while the active path guard terminates malformed cycles.
+pub fn interface_instances<'d, F>(interface_ty: &Type, lookup: F) -> Vec<InterfaceInstance>
+where
+    F: Copy + Fn(&str) -> Option<&'d Definition>,
+{
+    fn collect<'d, F>(
+        interface_ty: &Type,
+        parent_of: Option<&Symbol>,
+        lookup: F,
+        visited: &mut HashSet<String>,
+        visiting: &mut HashSet<Symbol>,
+        instances: &mut Vec<InterfaceInstance>,
+    ) where
+        F: Copy + Fn(&str) -> Option<&'d Definition>,
+    {
+        let resolved = crate::types::peel_alias(interface_ty, lookup);
+        let Type::Nominal { id, params } = &resolved else {
+            return;
+        };
+        // `Display` intentionally omits package qualification, so it cannot
+        // distinguish same-named interfaces from different packages.
+        if !visited.insert(format!("{resolved:?}")) || !visiting.insert(id.clone()) {
+            return;
+        }
+        let Some(Definition {
+            body: DefinitionBody::Interface { definition },
+            ..
+        }) = lookup(id)
+        else {
+            visiting.remove(id);
+            return;
+        };
+        let map = build_substitution_map(&definition.generics, params);
+        instances.push(InterfaceInstance {
+            ty: resolved.clone(),
+            parent_of: parent_of.cloned(),
+        });
+        for parent in &definition.parents {
+            collect(
+                &substitute(parent, &map),
+                Some(id),
+                lookup,
+                visited,
+                visiting,
+                instances,
+            );
+        }
+        visiting.remove(id);
+    }
+
+    let mut instances = Vec::new();
+    collect(
+        interface_ty,
+        None,
+        lookup,
+        &mut HashSet::default(),
+        &mut HashSet::default(),
+        &mut instances,
+    );
+    instances
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct InterfaceRequirement {
+    pub declaring_interface: Symbol,
+    pub parent_of: Option<Symbol>,
+    pub name: EcoString,
+    /// The method as declared. Its type determines the generic declaration's
+    /// physical ABI even when substitution reveals a special logical type.
+    pub method: Method,
+    /// The logical signature after applying all interface type arguments.
+    pub ty: Type,
+}
+
+/// Flatten an interface and its instantiated parents into declaration-tagged
+/// method requirements. Cycles and repeated generic instantiations are handled
+/// here so registration, inference, and emission cannot disagree about the
+/// inherited signatures.
+pub fn interface_requirements<'d, F>(interface_ty: &Type, lookup: F) -> Vec<InterfaceRequirement>
+where
+    F: Copy + Fn(&str) -> Option<&'d Definition>,
+{
+    let mut requirements = Vec::new();
+    for instance in interface_instances(interface_ty, lookup) {
+        let Type::Nominal { id, params } = instance.ty else {
+            continue;
+        };
+        let Some(Definition {
+            body: DefinitionBody::Interface { definition },
+            ..
+        }) = lookup(&id)
+        else {
+            continue;
+        };
+        let map = build_substitution_map(&definition.generics, &params);
+        requirements.extend(
+            definition
+                .methods
+                .iter()
+                .map(|(name, method)| InterfaceRequirement {
+                    declaring_interface: id.clone(),
+                    parent_of: instance.parent_of.clone(),
+                    name: name.clone(),
+                    method: method.clone(),
+                    ty: substitute(&method.ty, &map),
+                }),
+        );
+    }
+    requirements
+}
+
+/// Resolve the complete method set for a type, including inherited and alias methods.
+pub fn methods_for_type<'d, F>(
+    ty: &Type,
+    trait_bounds: &HashMap<crate::types::Symbol, Vec<Type>>,
+    lookup: F,
+) -> Methods
+where
+    F: Copy + Fn(&str) -> Option<&'d Definition>,
+{
+    fn collect<'d, F>(
+        ty: &Type,
+        trait_bounds: &HashMap<crate::types::Symbol, Vec<Type>>,
+        lookup: F,
+        visited: &mut HashSet<String>,
+    ) -> Methods
+    where
+        F: Copy + Fn(&str) -> Option<&'d Definition>,
+    {
+        let stripped = ty.strip_refs();
+        let Some(qualified_name) = method_lookup_key(&stripped) else {
+            return Methods::default();
+        };
+
+        if !visited.insert(qualified_name.as_str().to_string()) {
+            return Methods::default();
+        }
+
+        if lookup(&qualified_name)
+            .is_some_and(|definition| matches!(definition.body, DefinitionBody::Interface { .. }))
+        {
+            return interface_requirements(&stripped, lookup)
+                .into_iter()
+                .map(|requirement| {
+                    (
+                        requirement.name,
+                        requirement
+                            .method
+                            .with_type(requirement.ty)
+                            .with_receiver_placeholder(),
+                    )
+                })
+                .collect();
+        }
+
+        if let Some(bounds) = trait_bounds.get(&qualified_name) {
+            return bounds
+                .iter()
+                .flat_map(|bound| collect(bound, trait_bounds, lookup, visited))
+                .collect();
+        }
+
+        let mut methods = lookup(&qualified_name)
+            .and_then(Definition::methods)
+            .cloned()
+            .unwrap_or_default();
+
+        if lookup(&qualified_name).is_some_and(Definition::is_transparent_type_alias) {
+            let underlying = crate::types::peel_alias(&stripped, lookup);
+            if underlying != stripped {
+                for (name, method) in collect(&underlying, trait_bounds, lookup, visited) {
+                    methods.entry(name).or_insert(method);
+                }
+            }
+        }
+
+        methods
+    }
+
+    collect(ty, trait_bounds, lookup, &mut HashSet::default())
+}
+
+fn method_lookup_key(ty: &Type) -> Option<crate::types::Symbol> {
+    match ty {
+        Type::Nominal { id, .. } => Some(id.clone()),
+        Type::Compound { kind, .. } => Some(Symbol::from_parts("prelude", kind.leaf_name())),
+        Type::Simple(kind) => Some(Symbol::from_parts("prelude", kind.leaf_name())),
+        Type::Array { .. } => Some(Symbol::from_parts("prelude", "Array")),
+        _ => None,
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -421,7 +662,7 @@ impl Visibility {
 pub struct Interface {
     pub generics: Vec<Generic>,
     pub parents: Vec<Type>,
-    pub methods: HashMap<EcoString, Type>,
+    pub methods: Methods,
 }
 
 #[cfg(test)]
@@ -461,7 +702,18 @@ mod tests {
             body: DefinitionBody::Struct {
                 generics: vec![generic("T")],
                 fields: StructFields::Record(vec![]),
-                methods: HashMap::from_iter([("map".into(), method_ty)]),
+                methods: HashMap::from_iter([(
+                    "map".into(),
+                    Method {
+                        source_name: "map".into(),
+                        ty: method_ty,
+                        visibility: Visibility::Public,
+                        name_span: None,
+                        doc: None,
+                        allowed_lints: vec![],
+                        go_hints: vec![],
+                    },
+                )]),
                 attributes: Attributes::default(),
             },
         }

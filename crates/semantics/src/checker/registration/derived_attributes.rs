@@ -1,7 +1,7 @@
 use syntax::EcoString;
 use syntax::ast::{Attribute, Expression, Span, VariantFields};
 
-use super::TaskState;
+use super::{RegistrationFile, TaskState};
 use crate::store::Store;
 
 #[derive(Debug, Clone)]
@@ -18,13 +18,6 @@ pub(crate) enum DerivedAttributeTarget {
     Misplaced,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum DerivedAttributeKind {
-    Display,
-    Equality,
-    Iterate,
-}
-
 /// One source occurrence of an attribute that synthesizes a type capability.
 ///
 /// Placement is classified once for all three attributes. This keeps additions to
@@ -34,7 +27,6 @@ pub(crate) struct DerivedAttribute {
     pub(crate) span: Span,
     pub(crate) has_args: bool,
     pub(crate) target: DerivedAttributeTarget,
-    kind: DerivedAttributeKind,
 }
 
 pub(crate) struct DerivedAttributeContext {
@@ -42,7 +34,14 @@ pub(crate) struct DerivedAttributeContext {
     pub(crate) is_d_lis: bool,
 }
 
-pub(crate) struct DerivedAttributes {
+struct DerivedAttributes {
+    context: DerivedAttributeContext,
+    display: Vec<DerivedAttribute>,
+    equality: Vec<DerivedAttribute>,
+    iterate: Vec<DerivedAttribute>,
+}
+
+pub(crate) struct EqualityAttributes {
     pub(crate) context: DerivedAttributeContext,
     pub(crate) candidates: Vec<DerivedAttribute>,
 }
@@ -55,7 +54,7 @@ impl TaskState {
     ) {
         let candidates = collect_derived_attributes(
             DerivedAttributeContext {
-                package_id: self.cursor.package_id.clone(),
+                package_id: self.cursor.package_id().to_string(),
                 is_d_lis: self.is_d_lis(store),
             },
             items,
@@ -67,23 +66,24 @@ impl TaskState {
         &mut self,
         store: &mut Store,
         package_id: &str,
+        files: &[RegistrationFile],
     ) {
-        let candidates = {
-            let package = store.get_package(package_id).expect("package must exist");
-            package
-                .files
-                .values()
-                .map(|file| {
-                    collect_derived_attributes(
-                        DerivedAttributeContext {
-                            package_id: package_id.to_string(),
-                            is_d_lis: file.is_d_lis(),
-                        },
-                        &file.items,
-                    )
-                })
-                .collect::<Vec<_>>()
-        };
+        let candidates = files
+            .iter()
+            .map(|file| {
+                let is_d_lis = store
+                    .get_file(file.id)
+                    .expect("registered file must remain in the store")
+                    .is_d_lis();
+                collect_derived_attributes(
+                    DerivedAttributeContext {
+                        package_id: package_id.to_string(),
+                        is_d_lis,
+                    },
+                    &file.items,
+                )
+            })
+            .collect::<Vec<_>>();
         for candidates in candidates {
             self.register_derived_attributes(store, candidates);
         }
@@ -92,26 +92,18 @@ impl TaskState {
     fn register_derived_attributes(&mut self, store: &mut Store, candidates: DerivedAttributes) {
         let DerivedAttributes {
             context,
-            candidates,
+            display,
+            equality,
+            iterate,
         } = candidates;
-        for candidate in candidates
-            .iter()
-            .filter(|candidate| candidate.kind == DerivedAttributeKind::Iterate)
-        {
+        for candidate in &iterate {
             self.process_iterate_candidate(store, &context, candidate);
         }
-        for candidate in candidates
-            .iter()
-            .filter(|candidate| candidate.kind == DerivedAttributeKind::Display)
-        {
+        for candidate in &display {
             self.process_display_candidate(store, &context, candidate);
         }
-        let equality: Vec<_> = candidates
-            .into_iter()
-            .filter(|candidate| candidate.kind == DerivedAttributeKind::Equality)
-            .collect();
         if !equality.is_empty() {
-            self.pending_equality_attributes.push(DerivedAttributes {
+            self.pending.equality_attributes.push(EqualityAttributes {
                 context,
                 candidates: equality,
             });
@@ -125,7 +117,9 @@ fn collect_derived_attributes(
 ) -> DerivedAttributes {
     let mut out = DerivedAttributes {
         context,
-        candidates: Vec::new(),
+        display: Vec::new(),
+        equality: Vec::new(),
+        iterate: Vec::new(),
     };
     for item in items {
         match item {
@@ -193,17 +187,23 @@ fn collect_attributes(
     target: DerivedAttributeTarget,
     out: &mut DerivedAttributes,
 ) {
-    let mut collect = |name: &str, kind, target| {
-        if let Some(attribute) = attributes.iter().find(|attribute| attribute.name == name) {
-            out.candidates.push(DerivedAttribute {
+    let collect = |name: &str, target| {
+        attributes
+            .iter()
+            .find(|attribute| attribute.name == name)
+            .map(|attribute| DerivedAttribute {
                 span: attribute.span,
                 has_args: !attribute.args.is_empty(),
                 target,
-                kind,
-            });
-        }
+            })
     };
-    collect("display", DerivedAttributeKind::Display, target.clone());
-    collect("equality", DerivedAttributeKind::Equality, target.clone());
-    collect("iterate", DerivedAttributeKind::Iterate, target);
+    if let Some(attribute) = collect("display", target.clone()) {
+        out.display.push(attribute);
+    }
+    if let Some(attribute) = collect("equality", target.clone()) {
+        out.equality.push(attribute);
+    }
+    if let Some(attribute) = collect("iterate", target) {
+        out.iterate.push(attribute);
+    }
 }

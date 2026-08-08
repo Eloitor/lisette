@@ -29,10 +29,9 @@ pub fn lint(source: &str) -> Vec<LisetteDiagnostic> {
         panic!("Parsing failed in lint test: {:?}", parse_result.errors);
     }
 
-    let ast = parse_result.ast;
+    let mut ast = parse_result.ast;
 
-    let mut checker = TaskState::with_fresh_allocator();
-    checker.cursor.package_id = TEST_PACKAGE_ID.to_string();
+    let mut checker = TaskState::for_package(TEST_PACKAGE_ID);
     checker.put_prelude_in_scope(&store);
 
     let locator = deps::TypedefLocator::default();
@@ -63,21 +62,18 @@ pub fn lint(source: &str) -> Vec<LisetteDiagnostic> {
         .collect();
     checker.put_imported_packages_in_scope(&store, &imports);
 
-    checker.register_types_and_values(&mut store, &ast, &Visibility::Private);
-    checker.finalize_equality(&mut store);
-    checker.check_pending_generic_bounds(&store);
+    checker.register_types_and_values(&mut store, &mut ast, &Visibility::Private);
+    checker.finalize_registration(&mut store);
 
     let mut typed_ast = vec![];
-
-    for expression in ast {
-        let type_var = checker.new_type_var();
-        let typed_expression =
-            InferCtx::new(&mut checker, &store).infer_root_expression(expression, &type_var);
-        typed_ast.push(typed_expression);
-    }
-
     {
         let mut ctx = InferCtx::new(&mut checker, &store);
+        for expression in ast {
+            let type_var = ctx.new_type_var();
+            let typed_expression = ctx.infer_root_expression(expression, &type_var);
+            typed_ast.push(typed_expression);
+        }
+
         ctx.resolve_branch_subsumptions();
         ctx.resolve_select_exhaustiveness();
     }

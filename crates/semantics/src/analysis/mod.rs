@@ -25,13 +25,14 @@ use crate::cache::{
     go_stdlib::{self, load_cached_go_package},
     hash_package_source_pair, is_cache_disabled, prelude as prelude_cache, try_load_cache,
 };
-use crate::checker::infer::{FileInferenceInput, InferCtx};
-use crate::checker::{TaskOutput, TaskState};
+use crate::checker::infer::InferCtx;
+use crate::checker::{RegisteredPackage, TaskOutput, TaskState, UnregisteredPackage};
 use crate::diagnostics::{GoImportSite, emit_for_locator_result};
 use crate::facts::Facts;
 use crate::loader::{DiscoveredPackages, Loader};
 use crate::package_graph::{
-    DependencyGraph, PackageGraphOptions, Roots, ScannedFile, build_package_graph,
+    DependencyGraph, PackageGraphOptions, PackageGraphResult, Roots, ScannedFile,
+    build_package_graph,
 };
 use crate::prelude::{parse_and_register_prelude, parse_and_register_test_prelude};
 use crate::store::{ENTRY_FILE_ID, ENTRY_PACKAGE_ID, Store};
@@ -328,7 +329,7 @@ pub fn run_inference(input: AnalyzeInput) -> InferenceOutput {
 
     store.init_entry_package();
     let entry = register_entry_file(&mut store, &sink, input.entry, include_tests);
-    if entry.parse.is_failed() {
+    if entry.parse_failed() {
         let checker = TaskState::with_sink(sink, input.project_kind, input.scope.script_unit());
         return InferenceOutput {
             store,
@@ -339,7 +340,7 @@ pub fn run_inference(input: AnalyzeInput) -> InferenceOutput {
             cached_packages: HashSet::default(),
             cache_root: None,
             unreachable_packages: Vec::new(),
-            entry_parse: entry.parse,
+            entry_parse: entry.into_parse(),
         };
     }
     if input.load_siblings {
@@ -347,7 +348,7 @@ pub fn run_inference(input: AnalyzeInput) -> InferenceOutput {
             &mut store,
             &sink,
             input.loader,
-            entry.filename.as_deref(),
+            entry.filename(),
             include_tests,
         );
     }
@@ -403,10 +404,18 @@ pub fn run_inference(input: AnalyzeInput) -> InferenceOutput {
     parse_and_register_test_prelude(&mut store, &sink);
 
     let cache_root = cache.package_root().map(Path::to_path_buf);
+    let PackageGraphResult {
+        order,
+        files,
+        dependencies,
+        ..
+    } = graph_result;
     let package_output = infer_all_packages(
         &mut store,
         PackageInferenceInput {
-            graph_result,
+            order,
+            files,
+            dependencies,
             sink,
             compile_phase: input.compile_phase,
             go_module: input.go_module,
@@ -426,6 +435,6 @@ pub fn run_inference(input: AnalyzeInput) -> InferenceOutput {
         cached_packages: package_output.cached_packages,
         cache_root,
         unreachable_packages,
-        entry_parse: entry.parse,
+        entry_parse: entry.into_parse(),
     }
 }
